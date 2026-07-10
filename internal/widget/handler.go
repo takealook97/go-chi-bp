@@ -1,3 +1,4 @@
+// Package widget demonstrates a vertical business module.
 package widget
 
 import (
@@ -176,10 +177,5 @@ func queryInt32(r *http.Request, key string, fallback int32) (int32, error) {
 }
 
 func widgetToResponse(value Widget) widgetResponse {
-	return widgetResponse{
-		ID:        value.ID,
-		Name:      value.Name,
-		CreatedAt: value.CreatedAt,
-		UpdatedAt: value.UpdatedAt,
-	}
+	return widgetResponse(value)
 }

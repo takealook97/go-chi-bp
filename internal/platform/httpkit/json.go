@@ -1,3 +1,4 @@
+// Package httpkit contains framework-neutral HTTP transport helpers.
 package httpkit
 
 import (

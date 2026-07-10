@@ -1,3 +1,4 @@
+// Package httpserver configures and runs the inbound HTTP server.
 package httpserver
 
 import (
@@ -40,7 +41,7 @@ func Run(ctx context.Context, server *http.Server, shutdownTimeout time.Duration
 	case <-ctx.Done():
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {

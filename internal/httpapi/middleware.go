@@ -1,6 +1,8 @@
+// Package httpapi composes the API router and cross-cutting HTTP middleware.
 package httpapi
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -64,18 +66,18 @@ func logRequest(logger *slog.Logger) func(http.Handler) http.Handler {
 func recoverPanic(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			defer func() {
+			defer func(ctx context.Context) {
 				if recovered := recover(); recovered != nil {
 					logger.ErrorContext(
-						r.Context(),
+						ctx,
 						"HTTP handler panicked",
-						"requestID", middleware.GetReqID(r.Context()),
+						"requestID", middleware.GetReqID(ctx),
 						"panic", recovered,
 						"stack", string(debug.Stack()),
 					)
 					httpkit.WriteError(w, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 				}
-			}()
+			}(r.Context())
 
 			next.ServeHTTP(w, r)
 		})

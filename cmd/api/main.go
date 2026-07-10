@@ -1,3 +1,4 @@
+// Package main composes and runs the API process.
 package main
 
 import (

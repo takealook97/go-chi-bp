@@ -1,3 +1,4 @@
+// Package database constructs shared database infrastructure.
 package database
 
 import (

@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -32,7 +31,7 @@ func (emptyWidgetRepository) Delete(_ context.Context, _ int64) error {
 func TestLiveness(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	service := widget.NewService(emptyWidgetRepository{})
 	router := NewRouter(logger, func(context.Context) error { return nil }, widget.NewHandler(service, logger))
 	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/live", nil)
