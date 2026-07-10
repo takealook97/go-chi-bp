@@ -80,7 +80,7 @@ sqlc-check: $(SQLC) ## Verify generated database code is current.
 	$(SQLC) generate
 	git diff --exit-code -- internal/database/sqlc
 
-check: tools fmt-check sqlc-check openapi-check vet lint test-race build ## Run all required local and CI checks.
+check: fmt-check sqlc-check openapi-check vet lint test-race build ## Run all required local and CI checks.
 
 clean: ## Remove local build and tool artifacts.
 	rm -rf $(BIN_DIR) coverage.out coverage.html
