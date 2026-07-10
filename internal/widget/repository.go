@@ -78,5 +78,10 @@ func (repository *PostgresRepository) Delete(ctx context.Context, id int64) erro
 }
 
 func widgetFromDatabase(row dbgen.Widget) Widget {
-	return Widget{ID: row.ID, Name: row.Name, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
+	return Widget{
+		ID:        row.ID,
+		Name:      row.Name,
+		CreatedAt: row.CreatedAt.UTC(),
+		UpdatedAt: row.UpdatedAt.UTC(),
+	}
 }
