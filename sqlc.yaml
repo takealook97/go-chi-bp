@@ -1,0 +1,23 @@
+version: "2"
+sql:
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/database/sqlc
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        emit_exact_table_names: false
+        emit_json_tags: false
+        emit_prepared_queries: false
+        emit_pointers_for_null_types: true
+        emit_result_struct_pointers: false
+        emit_interface: false
+        query_parameter_limit: 1
+        overrides:
+          - db_type: timestamptz
+            go_type:
+              import: time
+              type: Time
