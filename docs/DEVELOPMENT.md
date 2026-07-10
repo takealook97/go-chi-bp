@@ -8,6 +8,7 @@ API:
 ```sh
 cp .env.example .env
 make tools
+make hooks
 make db-up
 make migrate-up
 make run
@@ -16,6 +17,9 @@ make run
 The application reads `.env` only through the Makefile. The binary itself reads
 the process environment and therefore behaves the same in containers and
 production.
+
+If port `5432` is already in use, change both `POSTGRES_PORT` and the port in
+`DATABASE_URL` in `.env` before starting PostgreSQL.
 
 ## Database workflow
 
@@ -53,4 +57,3 @@ make check
 ```
 
 Do not use floating versions in CI or Docker images.
-

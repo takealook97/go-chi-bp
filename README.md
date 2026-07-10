@@ -39,6 +39,7 @@ Requirements: Go 1.26+, Docker, and Docker Compose.
 ```sh
 cp .env.example .env
 make tools
+make hooks
 make db-up
 make migrate-up
 make run
@@ -62,6 +63,7 @@ make build           # Build the binary
 make test            # Run tests
 make test-race       # Run tests with the race detector
 make check           # Format check, generated-code check, vet, test, build
+make openapi-check   # Validate and lint the OpenAPI contract
 make sqlc            # Regenerate database access code
 make migrate-up      # Apply migrations
 make migrate-down    # Roll back one migration
@@ -78,4 +80,3 @@ make db-down         # Stop local PostgreSQL
 - [Security](SECURITY.md)
 
 `AGENTS.md` contains non-negotiable rules for AI-assisted changes.
-
