@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/example/go-chi-bp/internal/platform/config"
+	"github.com/lukuku-dev/go-chi-bp/internal/platform/config"
 )
 
 // New constructs an HTTP server with explicit production timeouts.

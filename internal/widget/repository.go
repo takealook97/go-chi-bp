@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	dbgen "github.com/example/go-chi-bp/internal/database/sqlc"
 	"github.com/jackc/pgx/v5"
+	dbgen "github.com/lukuku-dev/go-chi-bp/internal/database/sqlc"
 )
 
 // PostgresRepository persists widgets in PostgreSQL.

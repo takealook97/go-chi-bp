@@ -1,4 +1,4 @@
-module github.com/example/go-chi-bp
+module github.com/lukuku-dev/go-chi-bp
 
 go 1.26
 

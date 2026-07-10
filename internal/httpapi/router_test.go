@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/example/go-chi-bp/internal/widget"
+	"github.com/lukuku-dev/go-chi-bp/internal/widget"
 )
 
 type emptyWidgetRepository struct{}

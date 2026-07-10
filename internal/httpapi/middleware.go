@@ -8,8 +8,8 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/example/go-chi-bp/internal/platform/httpkit"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
 )
 
 type responseRecorder struct {

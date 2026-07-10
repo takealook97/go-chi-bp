@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/example/go-chi-bp/internal/platform/httpkit"
 	"github.com/go-chi/chi/v5"
+	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
 )
 
 // Handler exposes widget use cases over HTTP.

@@ -9,12 +9,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	dbgen "github.com/example/go-chi-bp/internal/database/sqlc"
-	"github.com/example/go-chi-bp/internal/httpapi"
-	"github.com/example/go-chi-bp/internal/platform/config"
-	"github.com/example/go-chi-bp/internal/platform/database"
-	"github.com/example/go-chi-bp/internal/platform/httpserver"
-	"github.com/example/go-chi-bp/internal/widget"
+	dbgen "github.com/lukuku-dev/go-chi-bp/internal/database/sqlc"
+	"github.com/lukuku-dev/go-chi-bp/internal/httpapi"
+	"github.com/lukuku-dev/go-chi-bp/internal/platform/config"
+	"github.com/lukuku-dev/go-chi-bp/internal/platform/database"
+	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpserver"
+	"github.com/lukuku-dev/go-chi-bp/internal/widget"
 )
 
 func main() {

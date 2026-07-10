@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/example/go-chi-bp/internal/platform/config"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lukuku-dev/go-chi-bp/internal/platform/config"
 )
 
 // Open creates and verifies a PostgreSQL connection pool.

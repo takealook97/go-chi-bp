@@ -24,8 +24,8 @@ caching, queues, email, and vendor integrations are intentionally excluded.
 
    ```sh
    go mod edit -module github.com/your-org/your-project
-   rg -l 'github.com/example/go-chi-bp' --glob '*.go' | \
-     xargs sed -i '' 's#github.com/example/go-chi-bp#github.com/your-org/your-project#g'
+   rg -l 'github.com/lukuku-dev/go-chi-bp' --glob '*.go' | \
+     xargs sed -i '' 's#github.com/lukuku-dev/go-chi-bp#github.com/your-org/your-project#g'
    ```
 
 3. Rename the `widget` example module to the first real business capability.
