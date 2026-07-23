@@ -3,7 +3,7 @@ module github.com/lukuku-dev/go-chi-bp
 go 1.26
 
 require (
-	github.com/go-chi/chi/v5 v5.2.3
+	github.com/go-chi/chi/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.10.0
 )
 
