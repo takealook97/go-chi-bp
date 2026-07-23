@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
 )
 

@@ -3,9 +3,13 @@
 Report vulnerabilities privately to the owning organization. Do not open a
 public issue containing exploit details or credentials.
 
+Template adopters must replace this paragraph with a monitored private security
+contact or disclosure URL before making the derived repository public.
+
 ## Baseline rules
 
 - Keep Go and dependencies supported and patched.
+- Run `make vuln` locally and keep the `govulncheck` CI gate passing.
 - Use parameterized SQL and strict JSON decoding.
 - Terminate TLS at a trusted ingress or load balancer.
 - Configure trusted proxy headers at deployment time; do not trust arbitrary

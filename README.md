@@ -25,7 +25,9 @@ caching, queues, email, and vendor integrations are intentionally excluded.
    ```sh
    go mod edit -module github.com/your-org/your-project
    rg -l 'github.com/lukuku-dev/go-chi-bp' --glob '*.go' | \
-     xargs sed -i '' 's#github.com/lukuku-dev/go-chi-bp#github.com/your-org/your-project#g'
+     xargs sed -i.bak 's#github.com/lukuku-dev/go-chi-bp#github.com/your-org/your-project#g'
+   find . -name '*.bak' -delete
+   gofmt -w .
    ```
 
 3. Rename the `widget` example module to the first real business capability.
@@ -63,13 +65,25 @@ make build           # Build the binary
 make test            # Run tests
 make test-race       # Run tests with the race detector
 make test-integration # Run PostgreSQL integration tests
-make check           # Format check, generated-code check, vet, test, build
+make cover           # Generate coverage.out and coverage.html
+make cover-check     # Enforce at least 80% maintained-package coverage
+make check           # Run every required local quality gate
+make fmt             # Format Go source and imports
+make fmt-check       # Verify formatting without changing files
+make lint            # Run configured linters and architecture guards
+make vet             # Run go vet
+make vuln            # Check reachable code for known vulnerabilities
+make tidy-check      # Verify module files are tidy
 make openapi-check   # Validate and lint the OpenAPI contract
 make sqlc            # Regenerate database access code
+make sqlc-check      # Verify generated database code is current
 make migrate-up      # Apply migrations
 make migrate-down    # Roll back one migration
+make migrate-status  # Show migration status
 make db-up           # Start local PostgreSQL
 make db-down         # Stop local PostgreSQL
+make docker-build    # Build the production container image
+make clean           # Remove generated local artifacts
 ```
 
 ## Documentation
@@ -82,6 +96,8 @@ make db-down         # Stop local PostgreSQL
 - [Security](SECURITY.md)
 
 `AGENTS.md` contains non-negotiable rules for AI-assisted changes.
+
+This template is available under the [MIT License](LICENSE).
 
 The modular monolith is the production default. The microservice guide describes
 how to extract a proven capability without introducing distributed infrastructure

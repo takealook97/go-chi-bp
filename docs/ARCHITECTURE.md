@@ -42,6 +42,11 @@ Each business capability owns its behavior, data access, and public interfaces.
 - Shared business models are avoided. Share stable primitives only when their
   semantics are genuinely identical.
 
+The repository enforces the most important business-layer import restrictions
+with depguard. When a module introduces a new adapter package or file layout,
+update `.golangci.yml` in the same change so the documented boundary remains
+machine-checkable.
+
 ## Database ownership
 
 PostgreSQL is shared at the deployment level in the default monolith, but table
@@ -90,3 +95,6 @@ rollback process.
 Until an extraction is approved, do not add remote-call abstractions, messaging,
 service discovery, distributed tracing vendors, or deployment units for
 hypothetical services.
+
+Architecture decisions that change these boundaries are recorded under
+`docs/adr/` using the repository template.

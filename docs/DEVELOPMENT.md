@@ -45,8 +45,7 @@ sqlc queries, roll the migration back, and remove the schema.
 
 ```sh
 make db-up
-TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/app?sslmode=disable' \
-  make test-integration
+make test-integration
 ```
 
 Use a dedicated non-production database. The integration test never logs the
@@ -56,10 +55,17 @@ integration path there. Without that variable, the integration test skips and
 the remaining local checks still run.
 
 `make check` remains the merge gate. It verifies formatting, generated sqlc
-output, OpenAPI quality, vet and lint findings, race-tested behavior, and the
-production binary build. It prints an explicit note when `TEST_DATABASE_URL` is
-absent and PostgreSQL integration tests were therefore skipped. CI always sets
-the variable.
+output, tidy module files, OpenAPI quality, vet and lint findings, reachable
+dependency vulnerabilities, race-tested behavior, and the production binary
+build. CI additionally builds the production container image. The check prints
+an explicit note when `TEST_DATABASE_URL` is absent and PostgreSQL integration
+tests were therefore skipped. CI always sets the variable.
+
+Generate a browsable local coverage report with `make cover`. The command writes
+`coverage.out` and `coverage.html`; both files are ignored and removed by
+`make clean`. The merge gate runs `make cover-check` and requires at least 80%
+statement coverage across maintained internal packages. Generated sqlc code and
+the composition root are excluded from that aggregate.
 
 The HTTP test suite also compares every OpenAPI path and method with the routes
 registered by Chi. This catches undocumented endpoints and documented endpoints
@@ -81,6 +87,10 @@ internal/orders/
 
 Small modules should stay small. Do not create empty `domain`, `usecase`,
 `ports`, and `adapters` directories to imitate an architecture diagram.
+
+The depguard rules in `.golangci.yml` mechanically keep router, database,
+generated SQL, and environment packages out of business model and service
+files. Extend those rules when adding a new technical adapter or module layout.
 
 Before turning a module into a service, keep it in-process and follow the
 [Microservice Evolution Guide](MICROSERVICES.md). Boundary hardening and contract

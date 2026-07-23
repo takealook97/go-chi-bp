@@ -48,6 +48,11 @@ Do not start extraction until all of the following are true:
 If a precondition is false, fix the modular boundary first. That work is useful
 even if extraction is later canceled.
 
+When extraction is approved, introduce vendor-neutral OpenTelemetry APIs and an
+environment-selected exporter as part of satisfying precondition 5. This is an
+explicit extraction requirement, not permission to add speculative telemetry
+vendors to the monolith.
+
 ## Target shape
 
 Start with the smallest topology that satisfies the requirement:
@@ -67,6 +72,11 @@ extracted capability service ----> capability-owned PostgreSQL database
 Keep the existing API as the compatibility edge when clients cannot migrate in
 one release. The edge may delegate requests temporarily, but it must not acquire
 business rules that belong to the extracted capability.
+
+Create the outbound HTTP adapter during the hardened-seam and network-contract
+steps, when its real contract and deadlines are known. Keep timeout, context
+propagation, idempotency, and bounded retry behavior in a focused platform
+adapter rather than duplicating them across modules.
 
 Do not introduce a gateway, service mesh, event broker, cache, or orchestration
 platform merely because the first service is extracted. Add each capability only
@@ -209,6 +219,11 @@ Whether the code is in one repository or several:
 - version contracts independently from deployment artifacts;
 - keep each service's migrations, tests, container, and runbook with that service;
 - make local development possible without starting every service.
+
+The monolith may keep a single ordered migration directory while modules share
+one deployment. Before extraction, inventory the capability's migration history
+and copy the minimum reproducible baseline into the new service; do not make the
+new service depend on replaying unrelated module migrations.
 
 ## Extraction completion checklist
 

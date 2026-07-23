@@ -2,6 +2,7 @@ package widget
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -96,6 +97,13 @@ func TestHandlerGet(t *testing.T) {
 			wantStatus: http.StatusNotFound,
 			wantBody:   `"code":"widget_not_found"`,
 		},
+		{
+			name:       "repository failure",
+			target:     "/7",
+			repository: &repositoryStub{getErr: errors.New("repository failure")},
+			wantStatus: http.StatusInternalServerError,
+			wantBody:   `"code":"internal_error"`,
+		},
 	}
 
 	for _, test := range tests {
@@ -121,10 +129,20 @@ func TestHandlerList(t *testing.T) {
 	}{
 		{
 			name:       "bounded page",
-			target:     "/?limit=10&offset=2",
+			target:     "/?limit=10",
 			repository: &repositoryStub{list: []Widget{}},
 			wantStatus: http.StatusOK,
-			wantBody:   `"items":[],"limit":10,"offset":2`,
+			wantBody:   `"items":[],"limit":10,"nextCursor":null`,
+		},
+		{
+			name:   "continuation cursor",
+			target: "/?limit=1",
+			repository: &repositoryStub{list: []Widget{
+				{ID: 2, CreatedAt: time.Unix(2, 0).UTC()},
+				{ID: 1, CreatedAt: time.Unix(1, 0).UTC()},
+			}},
+			wantStatus: http.StatusOK,
+			wantBody:   `"nextCursor":"`,
 		},
 		{
 			name:       "invalid integer",
@@ -136,6 +154,13 @@ func TestHandlerList(t *testing.T) {
 		{
 			name:       "out of bounds",
 			target:     "/?limit=101",
+			repository: &repositoryStub{},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   `"code":"invalid_pagination"`,
+		},
+		{
+			name:       "invalid cursor",
+			target:     "/?cursor=not-a-valid-cursor",
 			repository: &repositoryStub{},
 			wantStatus: http.StatusBadRequest,
 			wantBody:   `"code":"invalid_pagination"`,
@@ -179,6 +204,50 @@ func TestHandlerDelete(t *testing.T) {
 
 		assertResponse(t, response, http.StatusNotFound, `"code":"widget_not_found"`)
 	})
+
+	t.Run("invalid identifier", func(t *testing.T) {
+		t.Parallel()
+
+		response := serveWidgetRequest(t, &repositoryStub{}, http.MethodDelete, "/invalid", "")
+
+		assertResponse(t, response, http.StatusNotFound, `"code":"widget_not_found"`)
+	})
+
+	t.Run("repository failure", func(t *testing.T) {
+		t.Parallel()
+
+		response := serveWidgetRequest(t, &repositoryStub{deleteErr: errors.New("repository failure")}, http.MethodDelete, "/7", "")
+
+		assertResponse(t, response, http.StatusInternalServerError, `"code":"internal_error"`)
+	})
+}
+
+func TestListCursorRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	want := ListCursor{CreatedAt: time.Unix(1, 123456000).UTC(), ID: 7}
+	result, err := decodeListCursor(encodeListCursor(want))
+	if err != nil {
+		t.Fatalf("decodeListCursor() unexpected error: %v", err)
+	}
+	if *result != want {
+		t.Fatalf("cursor = %+v, want %+v", result, want)
+	}
+}
+
+func TestDecodeListCursorRejectsInvalidPayloads(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{
+		base64.RawURLEncoding.EncodeToString([]byte("missing-separator")),
+		base64.RawURLEncoding.EncodeToString([]byte("invalid|1")),
+		base64.RawURLEncoding.EncodeToString([]byte(time.Now().UTC().Format(time.RFC3339Nano) + "|invalid")),
+		base64.RawURLEncoding.EncodeToString([]byte(time.Now().UTC().Format(time.RFC3339Nano) + "|0")),
+	} {
+		if _, err := decodeListCursor(value); err == nil {
+			t.Errorf("decodeListCursor(%q) error = nil, want error", value)
+		}
+	}
 }
 
 func serveWidgetRequest(t *testing.T, repository *repositoryStub, method, target, body string) *httptest.ResponseRecorder {

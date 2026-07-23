@@ -15,5 +15,8 @@ rollback plan, module or service-boundary impact, and any deliberate convention
 exception. A proposal to extract a service must include the ADR evidence and
 completion criteria from `docs/MICROSERVICES.md`.
 
+Use `.github/pull_request_template.md` for the required review context and
+`docs/adr/template.md` for decisions that change architecture or conventions.
+
 Commit subjects use the English `type: imperative summary` format documented in
 `docs/CONVENTIONS.md`.

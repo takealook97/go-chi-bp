@@ -12,8 +12,15 @@ WHERE id = $1;
 SELECT id, name, created_at, updated_at
 FROM widgets
 ORDER BY created_at DESC, id DESC
-LIMIT sqlc.arg(page_limit)
-OFFSET sqlc.arg(page_offset);
+LIMIT $1;
+
+-- name: ListWidgetsAfter :many
+SELECT id, name, created_at, updated_at
+FROM widgets
+WHERE created_at < sqlc.arg(cursor_created_at)
+   OR (created_at = sqlc.arg(cursor_created_at) AND id < sqlc.arg(cursor_id))
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(page_limit);
 
 -- name: DeleteWidget :execrows
 DELETE FROM widgets

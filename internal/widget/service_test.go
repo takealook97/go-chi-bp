@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 type repositoryStub struct {
@@ -162,8 +163,30 @@ func TestServiceListAppliesDefaultLimit(t *testing.T) {
 	if _, err := service.List(context.Background(), ListOptions{}); err != nil {
 		t.Fatalf("List() unexpected error: %v", err)
 	}
-	if repository.listOptions.Limit != defaultListLimit {
-		t.Fatalf("repository limit = %d, want %d", repository.listOptions.Limit, defaultListLimit)
+	if repository.listOptions.Limit != defaultListLimit+1 {
+		t.Fatalf("repository limit = %d, want %d", repository.listOptions.Limit, defaultListLimit+1)
+	}
+}
+
+func TestServiceListReturnsContinuationCursor(t *testing.T) {
+	t.Parallel()
+
+	createdAt := time.Unix(3, 0).UTC()
+	repository := &repositoryStub{list: []Widget{
+		{ID: 3, CreatedAt: createdAt},
+		{ID: 2, CreatedAt: createdAt.Add(-time.Second)},
+		{ID: 1, CreatedAt: createdAt.Add(-2 * time.Second)},
+	}}
+
+	page, err := NewService(repository).List(context.Background(), ListOptions{Limit: 2})
+	if err != nil {
+		t.Fatalf("List() unexpected error: %v", err)
+	}
+	if len(page.Items) != 2 {
+		t.Fatalf("item count = %d, want 2", len(page.Items))
+	}
+	if page.NextCursor == nil || page.NextCursor.ID != 2 {
+		t.Fatalf("next cursor = %+v, want widget 2", page.NextCursor)
 	}
 }
 
@@ -173,7 +196,8 @@ func TestServiceListRejectsInvalidPagination(t *testing.T) {
 	tests := []ListOptions{
 		{Limit: -1},
 		{Limit: maximumListLimit + 1},
-		{Limit: 1, Offset: -1},
+		{Limit: 1, Cursor: &ListCursor{}},
+		{Limit: 1, Cursor: &ListCursor{CreatedAt: time.Now(), ID: -1}},
 	}
 
 	for _, options := range tests {

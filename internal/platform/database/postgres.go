@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/config"
 )
 

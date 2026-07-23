@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
 	"github.com/lukuku-dev/go-chi-bp/internal/widget"
 )

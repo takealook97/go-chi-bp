@@ -74,20 +74,30 @@ func (service *Service) Get(ctx context.Context, id int64) (Widget, error) {
 }
 
 // List returns a bounded page of widgets.
-func (service *Service) List(ctx context.Context, options ListOptions) ([]Widget, error) {
+func (service *Service) List(ctx context.Context, options ListOptions) (Page, error) {
 	if options.Limit == 0 {
 		options.Limit = defaultListLimit
 	}
-	if options.Limit < 1 || options.Limit > maximumListLimit || options.Offset < 0 {
-		return nil, ErrInvalidPagination
+	if options.Limit < 1 || options.Limit > maximumListLimit ||
+		(options.Cursor != nil && (options.Cursor.ID < 1 || options.Cursor.CreatedAt.IsZero())) {
+		return Page{}, ErrInvalidPagination
 	}
 
+	requestedLimit := options.Limit
+	options.Limit++
 	results, err := service.repository.List(ctx, options)
 	if err != nil {
-		return nil, fmt.Errorf("list widgets: %w", err)
+		return Page{}, fmt.Errorf("list widgets: %w", err)
 	}
 
-	return results, nil
+	page := Page{Items: results}
+	if len(results) > int(requestedLimit) {
+		page.Items = results[:requestedLimit]
+		last := page.Items[len(page.Items)-1]
+		page.NextCursor = &ListCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+	}
+
+	return page, nil
 }
 
 // Delete removes one widget.

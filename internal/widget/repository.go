@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
 	dbgen "github.com/lukuku-dev/go-chi-bp/internal/database/sqlc"
 )
 
@@ -48,10 +49,19 @@ func (repository *PostgresRepository) Get(ctx context.Context, id int64) (Widget
 
 // List selects a bounded page of widgets.
 func (repository *PostgresRepository) List(ctx context.Context, options ListOptions) ([]Widget, error) {
-	rows, err := repository.queries.ListWidgets(ctx, dbgen.ListWidgetsParams{
-		PageLimit:  options.Limit,
-		PageOffset: options.Offset,
-	})
+	var (
+		rows []dbgen.Widget
+		err  error
+	)
+	if options.Cursor == nil {
+		rows, err = repository.queries.ListWidgets(ctx, options.Limit)
+	} else {
+		rows, err = repository.queries.ListWidgetsAfter(ctx, dbgen.ListWidgetsAfterParams{
+			CursorCreatedAt: options.Cursor.CreatedAt,
+			CursorID:        options.Cursor.ID,
+			PageLimit:       options.Limit,
+		})
+	}
 	if err != nil {
 		return nil, fmt.Errorf("select widgets: %w", err)
 	}

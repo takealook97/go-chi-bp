@@ -40,8 +40,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
+      - name: Restore pinned tool binaries
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: bin
+          key: ${{ runner.os }}-${{ runner.arch }}-tools-${{ hashFiles('Makefile') }}
       - name: Run checks
         run: make check
+      - name: Build production container
+        run: make docker-build
 
   commit-convention:
     if: github.event_name == 'pull_request'

@@ -8,6 +8,7 @@ linters:
   enable:
     - bodyclose
     - contextcheck
+    - depguard
     - errorlint
     - gocritic
     - gosec
@@ -17,6 +18,23 @@ linters:
     - rowserrcheck
     - sloglint
     - unconvert
+  settings:
+    depguard:
+      rules:
+        business-layer:
+          list-mode: lax
+          files:
+            - "**/internal/*/model.go"
+            - "**/internal/*/service.go"
+          deny:
+            - pkg: github.com/go-chi/chi/v5
+              desc: business code must not depend on the HTTP router
+            - pkg: github.com/jackc/pgx/v5
+              desc: business code must not depend on the PostgreSQL driver
+            - pkg: github.com/lukuku-dev/go-chi-bp/internal/database/sqlc
+              desc: generated database code must stay behind repositories
+            - pkg: github.com/lukuku-dev/go-chi-bp/internal/platform/config
+              desc: business code must receive validated values through constructors
   exclusions:
     generated: strict
 
@@ -26,6 +44,10 @@ formatters:
     - goimports
   exclusions:
     generated: strict
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/lukuku-dev/go-chi-bp
 
 issues:
   max-issues-per-linter: 0

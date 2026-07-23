@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	dbgen "github.com/lukuku-dev/go-chi-bp/internal/database/sqlc"
 )
 
@@ -82,13 +83,40 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	if selected != created {
 		t.Fatalf("Get() = %+v, want %+v", selected, created)
 	}
+	if _, err := pool.Exec(ctx, "SELECT pg_sleep(0.01)"); err != nil {
+		t.Fatalf("wait before update: %v", err)
+	}
+	var updatedAt time.Time
+	if err := pool.QueryRow(ctx, "UPDATE widgets SET name = $1 WHERE id = $2 RETURNING updated_at", "updated widget", created.ID).
+		Scan(&updatedAt); err != nil {
+		t.Fatalf("update widget timestamp: %v", err)
+	}
+	if !updatedAt.After(created.UpdatedAt) {
+		t.Fatalf("updated_at = %v, want after %v", updatedAt, created.UpdatedAt)
+	}
 
-	items, err := repository.List(ctx, ListOptions{Limit: 10})
+	second, err := repository.Create(ctx, "second widget")
+	if err != nil {
+		t.Fatalf("Create() second widget unexpected error: %v", err)
+	}
+
+	items, err := repository.List(ctx, ListOptions{Limit: 1})
 	if err != nil {
 		t.Fatalf("List() unexpected error: %v", err)
 	}
+	if len(items) != 1 || items[0].ID != second.ID {
+		t.Fatalf("List() = %+v, want second widget", items)
+	}
+
+	items, err = repository.List(ctx, ListOptions{
+		Limit:  1,
+		Cursor: &ListCursor{CreatedAt: items[0].CreatedAt, ID: items[0].ID},
+	})
+	if err != nil {
+		t.Fatalf("List() after cursor unexpected error: %v", err)
+	}
 	if len(items) != 1 || items[0].ID != created.ID {
-		t.Fatalf("List() = %+v, want created widget", items)
+		t.Fatalf("List() after cursor = %+v, want first widget", items)
 	}
 
 	if err := repository.Delete(ctx, created.ID); err != nil {
@@ -96,6 +124,9 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	}
 	if _, err := repository.Get(ctx, created.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Get() after delete error = %v, want ErrNotFound", err)
+	}
+	if err := repository.Delete(ctx, second.ID); err != nil {
+		t.Fatalf("Delete() second widget unexpected error: %v", err)
 	}
 
 	for index := len(migrations) - 1; index >= 0; index-- {

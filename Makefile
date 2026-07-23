@@ -11,21 +11,24 @@ SQLC := $(BIN_DIR)/sqlc
 GOOSE := $(BIN_DIR)/goose
 GOLANGCI_LINT := $(BIN_DIR)/golangci-lint
 VACUUM := $(BIN_DIR)/vacuum
+GOVULNCHECK := $(BIN_DIR)/govulncheck
 
 SQLC_VERSION := v1.31.1
 GOOSE_VERSION := v3.27.2
 GOLANGCI_LINT_VERSION := v2.12.2
 VACUUM_VERSION := v0.29.9
+GOVULNCHECK_VERSION := v1.6.0
+COVERAGE_MIN := 80.0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help tools hooks run build test test-race test-integration fmt fmt-check lint vet openapi-check sqlc sqlc-check \
-	check clean db-up db-down migrate-up migrate-down migrate-status
+.PHONY: help tools hooks run build docker-build test test-race test-integration cover cover-check fmt fmt-check lint vet vuln \
+	tidy-check openapi-check sqlc sqlc-check check clean db-up db-down migrate-up migrate-down migrate-status
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*## "; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-tools: $(SQLC) $(GOOSE) $(GOLANGCI_LINT) $(VACUUM) ## Install pinned development tools locally.
+tools: $(SQLC) $(GOOSE) $(GOLANGCI_LINT) $(VACUUM) $(GOVULNCHECK) ## Install pinned development tools locally.
 
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
@@ -42,6 +45,9 @@ $(GOLANGCI_LINT): | $(BIN_DIR)
 $(VACUUM): | $(BIN_DIR)
 	GOBIN=$(BIN_DIR) go install github.com/daveshanley/vacuum@$(VACUUM_VERSION)
 
+$(GOVULNCHECK): | $(BIN_DIR)
+	GOBIN=$(BIN_DIR) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+
 hooks: ## Enable repository-managed Git hooks.
 	git config core.hooksPath .githooks
 
@@ -51,6 +57,9 @@ run: ## Run the API with the current environment.
 build: ## Build the API binary.
 	@mkdir -p $(BIN_DIR)
 	CGO_ENABLED=0 go build -trimpath -o $(API_BIN) ./cmd/api
+
+docker-build: ## Verify the production container image builds.
+	docker build --tag go-chi-bp:check .
 
 test: ## Run all unit tests.
 	go test ./...
@@ -62,17 +71,32 @@ test-integration: ## Run PostgreSQL integration tests against TEST_DATABASE_URL.
 	@test -n "$(TEST_DATABASE_URL)" || { echo "TEST_DATABASE_URL is required"; exit 1; }
 	go test -race -count=1 -run Integration ./internal/platform/database ./internal/widget
 
+cover: ## Generate an HTML coverage report for maintained application packages.
+	go test -coverprofile=coverage.out ./internal/httpapi ./internal/platform/... ./internal/widget
+	go tool cover -html=coverage.out -o coverage.html
+	@go tool cover -func=coverage.out | tail -n 1
+
+cover-check: cover ## Enforce the minimum maintained-package coverage.
+	@go tool cover -func=coverage.out | awk -v minimum=$(COVERAGE_MIN) '/^total:/ { value=$$3; sub(/%/, "", value); if (value + 0 < minimum) { printf "Coverage %.1f%% is below %.1f%%.\n", value, minimum; exit 1 } }'
+
 fmt: $(GOLANGCI_LINT) ## Format Go source files.
 	$(GOLANGCI_LINT) fmt
 
-fmt-check: ## Verify gofmt formatting without modifying files.
-	@files="$$(gofmt -l .)"; test -z "$$files" || { echo "Unformatted files:"; echo "$$files"; exit 1; }
+fmt-check: $(GOLANGCI_LINT) ## Verify configured formatting without modifying files.
+	$(GOLANGCI_LINT) fmt --diff
 
 lint: $(GOLANGCI_LINT) ## Run the configured linters.
 	$(GOLANGCI_LINT) run
 
 vet: ## Run go vet.
 	go vet ./...
+
+vuln: $(GOVULNCHECK) ## Check reachable code for known Go vulnerabilities.
+	$(GOVULNCHECK) ./...
+
+tidy-check: ## Verify go.mod and go.sum are tidy.
+	go mod tidy
+	git diff --exit-code -- go.mod go.sum
 
 openapi-check: $(VACUUM) ## Validate and lint the OpenAPI contract.
 	$(VACUUM) lint -d api/openapi.yaml
@@ -84,7 +108,7 @@ sqlc-check: $(SQLC) ## Verify generated database code is current.
 	$(SQLC) generate
 	git diff --exit-code -- internal/database/sqlc
 
-check: fmt-check sqlc-check openapi-check vet lint test-race build ## Run all required local and CI checks.
+check: fmt-check tidy-check sqlc-check openapi-check vet lint vuln test-race cover-check build ## Run all required local and CI checks.
 	@if test -z "$(TEST_DATABASE_URL)"; then echo "NOTE: PostgreSQL integration tests were skipped because TEST_DATABASE_URL is not set."; fi
 
 clean: ## Remove local build and tool artifacts.

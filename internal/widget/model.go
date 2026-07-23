@@ -10,8 +10,20 @@ type Widget struct {
 	UpdatedAt time.Time
 }
 
+// ListCursor identifies the last widget returned by a previous page.
+type ListCursor struct {
+	CreatedAt time.Time
+	ID        int64
+}
+
 // ListOptions controls bounded widget listing.
 type ListOptions struct {
 	Limit  int32
-	Offset int32
+	Cursor *ListCursor
+}
+
+// Page contains one bounded page and an optional continuation cursor.
+type Page struct {
+	Items      []Widget
+	NextCursor *ListCursor
 }

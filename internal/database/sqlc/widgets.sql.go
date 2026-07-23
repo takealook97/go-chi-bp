@@ -7,6 +7,7 @@ package dbgen
 
 import (
 	"context"
+	"time"
 )
 
 const createWidget = `-- name: CreateWidget :one
@@ -62,17 +63,51 @@ const listWidgets = `-- name: ListWidgets :many
 SELECT id, name, created_at, updated_at
 FROM widgets
 ORDER BY created_at DESC, id DESC
-LIMIT $2
-OFFSET $1
+LIMIT $1
 `
 
-type ListWidgetsParams struct {
-	PageOffset int32
-	PageLimit  int32
+func (q *Queries) ListWidgets(ctx context.Context, limit int32) ([]Widget, error) {
+	rows, err := q.db.Query(ctx, listWidgets, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Widget{}
+	for rows.Next() {
+		var i Widget
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-func (q *Queries) ListWidgets(ctx context.Context, arg ListWidgetsParams) ([]Widget, error) {
-	rows, err := q.db.Query(ctx, listWidgets, arg.PageOffset, arg.PageLimit)
+const listWidgetsAfter = `-- name: ListWidgetsAfter :many
+SELECT id, name, created_at, updated_at
+FROM widgets
+WHERE created_at < $1
+   OR (created_at = $1 AND id < $2)
+ORDER BY created_at DESC, id DESC
+LIMIT $3
+`
+
+type ListWidgetsAfterParams struct {
+	CursorCreatedAt time.Time
+	CursorID        int64
+	PageLimit       int32
+}
+
+func (q *Queries) ListWidgetsAfter(ctx context.Context, arg ListWidgetsAfterParams) ([]Widget, error) {
+	rows, err := q.db.Query(ctx, listWidgetsAfter, arg.CursorCreatedAt, arg.CursorID, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}

@@ -45,7 +45,7 @@ paths:
     get:
       operationId: listWidgets
       summary: List widgets
-      description: Returns a bounded offset-based page of widgets.
+      description: Returns a bounded cursor-based page of widgets.
       tags: [Widgets]
       parameters:
         - name: limit
@@ -57,14 +57,13 @@ paths:
             minimum: 1
             maximum: 100
             default: 20
-        - name: offset
+        - name: cursor
           in: query
-          description: Number of widgets to skip.
+          description: Opaque continuation cursor returned by the previous page.
           schema:
-            type: integer
-            format: int32
-            minimum: 0
-            default: 0
+            type: string
+            minLength: 1
+            pattern: "^[A-Za-z0-9_-]+$"
       responses:
         "200":
           description: A page of widgets.
@@ -79,7 +78,7 @@ paths:
                     createdAt: "2026-07-10T10:00:00Z"
                     updatedAt: "2026-07-10T10:00:00Z"
                 limit: 20
-                offset: 0
+                nextCursor: MjAyNi0wNy0xMFQxMDowMDowMFp8MQ
         "400":
           $ref: "#/components/responses/BadRequest"
         "500":
@@ -207,7 +206,7 @@ components:
       description: Bounded page of widgets.
       type: object
       additionalProperties: false
-      required: [items, limit, offset]
+      required: [items, limit, nextCursor]
       properties:
         items:
           description: Widgets in the current page.
@@ -223,10 +222,12 @@ components:
           type: integer
           format: int32
           example: 20
-        offset:
-          type: integer
-          format: int32
-          example: 0
+        nextCursor:
+          description: Opaque cursor for the next page, or null on the final page.
+          type: [string, "null"]
+          minLength: 1
+          pattern: "^[A-Za-z0-9_-]+$"
+          example: MjAyNi0wNy0xMFQxMDowMDowMFp8MQ
     ErrorResponse:
       description: Stable client-safe API error envelope.
       type: object

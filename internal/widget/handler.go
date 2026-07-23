@@ -2,13 +2,17 @@
 package widget
 
 import (
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
 )
 
@@ -50,9 +54,9 @@ type widgetResponse struct {
 }
 
 type widgetListResponse struct {
-	Items  []widgetResponse `json:"items"`
-	Limit  int32            `json:"limit"`
-	Offset int32            `json:"offset"`
+	Items      []widgetResponse `json:"items"`
+	Limit      int32            `json:"limit"`
+	NextCursor *string          `json:"nextCursor"`
 }
 
 func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -108,14 +112,14 @@ func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	offset, err := queryInt32(r, "offset", 0)
+	cursor, err := decodeListCursor(r.URL.Query().Get("cursor"))
 	if err != nil {
 		httpkit.WriteError(w, http.StatusBadRequest, "invalid_pagination", "Pagination parameters are invalid.")
 
 		return
 	}
 
-	results, err := handler.service.List(r.Context(), ListOptions{Limit: limit, Offset: offset})
+	page, err := handler.service.List(r.Context(), ListOptions{Limit: limit, Cursor: cursor})
 	if errors.Is(err, ErrInvalidPagination) {
 		httpkit.WriteError(w, http.StatusBadRequest, "invalid_pagination", "Pagination parameters are invalid.")
 
@@ -127,12 +131,18 @@ func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]widgetResponse, 0, len(results))
-	for _, result := range results {
+	items := make([]widgetResponse, 0, len(page.Items))
+	for _, result := range page.Items {
 		items = append(items, widgetToResponse(result))
 	}
 
-	httpkit.WriteJSON(w, http.StatusOK, widgetListResponse{Items: items, Limit: limit, Offset: offset})
+	var nextCursor *string
+	if page.NextCursor != nil {
+		encoded := encodeListCursor(*page.NextCursor)
+		nextCursor = &encoded
+	}
+
+	httpkit.WriteJSON(w, http.StatusOK, widgetListResponse{Items: items, Limit: limit, NextCursor: nextCursor})
 }
 
 func (handler *Handler) delete(w http.ResponseWriter, r *http.Request) {
@@ -174,6 +184,38 @@ func queryInt32(r *http.Request, key string, fallback int32) (int32, error) {
 	parsed, err := strconv.ParseInt(value, 10, 32)
 
 	return int32(parsed), err
+}
+
+func encodeListCursor(cursor ListCursor) string {
+	payload := cursor.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + strconv.FormatInt(cursor.ID, 10)
+
+	return base64.RawURLEncoding.EncodeToString([]byte(payload))
+}
+
+func decodeListCursor(value string) (*ListCursor, error) {
+	if value == "" {
+		return nil, nil
+	}
+
+	payload, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil {
+		return nil, fmt.Errorf("decode cursor: %w", err)
+	}
+
+	createdAtValue, idValue, found := strings.Cut(string(payload), "|")
+	if !found {
+		return nil, errors.New("cursor separator is missing")
+	}
+	createdAt, err := time.Parse(time.RFC3339Nano, createdAtValue)
+	if err != nil {
+		return nil, fmt.Errorf("parse cursor timestamp: %w", err)
+	}
+	id, err := strconv.ParseInt(idValue, 10, 64)
+	if err != nil || id < 1 {
+		return nil, errors.New("cursor identifier is invalid")
+	}
+
+	return &ListCursor{CreatedAt: createdAt.UTC(), ID: id}, nil
 }
 
 func widgetToResponse(value Widget) widgetResponse {
