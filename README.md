@@ -62,6 +62,7 @@ make run             # Run the API
 make build           # Build the binary
 make test            # Run tests
 make test-race       # Run tests with the race detector
+make test-integration # Run PostgreSQL integration tests
 make check           # Format check, generated-code check, vet, test, build
 make openapi-check   # Validate and lint the OpenAPI contract
 make sqlc            # Regenerate database access code
@@ -76,7 +77,12 @@ make db-down         # Stop local PostgreSQL
 - [Architecture](docs/ARCHITECTURE.md)
 - [Conventions](docs/CONVENTIONS.md)
 - [Development](docs/DEVELOPMENT.md)
+- [Microservice evolution](docs/MICROSERVICES.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
 `AGENTS.md` contains non-negotiable rules for AI-assisted changes.
+
+The modular monolith is the production default. The microservice guide describes
+how to extract a proven capability without introducing distributed infrastructure
+or shared data ownership prematurely.

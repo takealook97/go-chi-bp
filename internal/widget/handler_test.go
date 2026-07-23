@@ -1,0 +1,206 @@
+package widget
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestHandlerCreate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		body       string
+		repository *repositoryStub
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name: "created",
+			body: `{"name":"example"}`,
+			repository: &repositoryStub{create: Widget{
+				ID: 1, Name: "example", CreatedAt: time.Unix(1, 0).UTC(), UpdatedAt: time.Unix(1, 0).UTC(),
+			}},
+			wantStatus: http.StatusCreated,
+			wantBody:   `"name":"example"`,
+		},
+		{
+			name:       "unknown field",
+			body:       `{"name":"example","extra":true}`,
+			repository: &repositoryStub{},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   `"code":"invalid_request"`,
+		},
+		{
+			name:       "invalid name",
+			body:       `{"name":"   "}`,
+			repository: &repositoryStub{},
+			wantStatus: http.StatusUnprocessableEntity,
+			wantBody:   `"code":"invalid_widget_name"`,
+		},
+		{
+			name:       "repository failure",
+			body:       `{"name":"example"}`,
+			repository: &repositoryStub{createErr: errors.New("repository failure")},
+			wantStatus: http.StatusInternalServerError,
+			wantBody:   `"code":"internal_error"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			response := serveWidgetRequest(t, test.repository, http.MethodPost, "/", test.body)
+
+			assertResponse(t, response, test.wantStatus, test.wantBody)
+		})
+	}
+}
+
+func TestHandlerGet(t *testing.T) {
+	t.Parallel()
+
+	createdAt := time.Unix(1, 0).UTC()
+	tests := []struct {
+		name       string
+		target     string
+		repository *repositoryStub
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "found",
+			target:     "/7",
+			repository: &repositoryStub{get: Widget{ID: 7, Name: "example", CreatedAt: createdAt, UpdatedAt: createdAt}},
+			wantStatus: http.StatusOK,
+			wantBody:   `"id":7`,
+		},
+		{
+			name:       "invalid identifier",
+			target:     "/invalid",
+			repository: &repositoryStub{},
+			wantStatus: http.StatusNotFound,
+			wantBody:   `"code":"widget_not_found"`,
+		},
+		{
+			name:       "not found",
+			target:     "/7",
+			repository: &repositoryStub{getErr: ErrNotFound},
+			wantStatus: http.StatusNotFound,
+			wantBody:   `"code":"widget_not_found"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			response := serveWidgetRequest(t, test.repository, http.MethodGet, test.target, "")
+
+			assertResponse(t, response, test.wantStatus, test.wantBody)
+		})
+	}
+}
+
+func TestHandlerList(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		target     string
+		repository *repositoryStub
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "bounded page",
+			target:     "/?limit=10&offset=2",
+			repository: &repositoryStub{list: []Widget{}},
+			wantStatus: http.StatusOK,
+			wantBody:   `"items":[],"limit":10,"offset":2`,
+		},
+		{
+			name:       "invalid integer",
+			target:     "/?limit=many",
+			repository: &repositoryStub{},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   `"code":"invalid_pagination"`,
+		},
+		{
+			name:       "out of bounds",
+			target:     "/?limit=101",
+			repository: &repositoryStub{},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   `"code":"invalid_pagination"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			response := serveWidgetRequest(t, test.repository, http.MethodGet, test.target, "")
+
+			assertResponse(t, response, test.wantStatus, test.wantBody)
+		})
+	}
+}
+
+func TestHandlerDelete(t *testing.T) {
+	t.Parallel()
+
+	t.Run("deleted", func(t *testing.T) {
+		t.Parallel()
+
+		response := serveWidgetRequest(t, &repositoryStub{}, http.MethodDelete, "/7", "")
+
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want %d", response.Code, http.StatusNoContent)
+		}
+		if response.Body.Len() != 0 {
+			t.Fatalf("body = %q, want empty", response.Body.String())
+		}
+		if got := response.Header().Get("Content-Type"); got != "" {
+			t.Fatalf("Content-Type = %q, want empty", got)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		t.Parallel()
+
+		response := serveWidgetRequest(t, &repositoryStub{deleteErr: ErrNotFound}, http.MethodDelete, "/7", "")
+
+		assertResponse(t, response, http.StatusNotFound, `"code":"widget_not_found"`)
+	})
+}
+
+func serveWidgetRequest(t *testing.T, repository *repositoryStub, method, target, body string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	logger := slog.New(slog.DiscardHandler)
+	handler := NewHandler(NewService(repository), logger).Router()
+	request := httptest.NewRequestWithContext(context.Background(), method, target, strings.NewReader(body))
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	return response
+}
+
+func assertResponse(t *testing.T, response *httptest.ResponseRecorder, wantStatus int, wantBody string) {
+	t.Helper()
+
+	if response.Code != wantStatus {
+		t.Fatalf("status = %d, want %d; body = %q", response.Code, wantStatus, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), wantBody) {
+		t.Fatalf("body = %q, want to contain %q", response.Body.String(), wantBody)
+	}
+}

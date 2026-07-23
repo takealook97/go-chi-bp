@@ -17,3 +17,10 @@ public issue containing exploit details or credentials.
 Authentication and authorization are application-specific and intentionally not
 implemented in this template.
 
+## Service extraction
+
+Moving a module behind a network interface creates a new trust boundary. Before
+cutover, define workload identity, per-operation authorization, encrypted
+transport, network policy, least-privilege service and database credentials,
+rotation ownership, and incident response. Do not assume that an internal
+network is trusted. See `docs/MICROSERVICES.md` for the full extraction gate.

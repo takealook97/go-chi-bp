@@ -24,8 +24,8 @@ func NewRouter(logger *slog.Logger, readinessCheck ReadinessCheck, widgetHandler
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(securityHeaders)
-	router.Use(recoverPanic(logger))
 	router.Use(logRequest(logger))
+	router.Use(recoverPanic(logger))
 
 	router.Get("/health/live", liveness)
 	router.Get("/health/ready", readiness(readinessCheck))

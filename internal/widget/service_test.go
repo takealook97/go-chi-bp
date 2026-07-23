@@ -7,9 +7,17 @@ import (
 )
 
 type repositoryStub struct {
-	createName string
-	create     Widget
-	createErr  error
+	createName  string
+	create      Widget
+	createErr   error
+	getID       int64
+	get         Widget
+	getErr      error
+	listOptions ListOptions
+	list        []Widget
+	listErr     error
+	deleteID    int64
+	deleteErr   error
 }
 
 func (stub *repositoryStub) Create(_ context.Context, name string) (Widget, error) {
@@ -18,16 +26,22 @@ func (stub *repositoryStub) Create(_ context.Context, name string) (Widget, erro
 	return stub.create, stub.createErr
 }
 
-func (stub *repositoryStub) Get(_ context.Context, _ int64) (Widget, error) {
-	return Widget{}, ErrNotFound
+func (stub *repositoryStub) Get(_ context.Context, id int64) (Widget, error) {
+	stub.getID = id
+
+	return stub.get, stub.getErr
 }
 
-func (stub *repositoryStub) List(_ context.Context, _ ListOptions) ([]Widget, error) {
-	return []Widget{}, nil
+func (stub *repositoryStub) List(_ context.Context, options ListOptions) ([]Widget, error) {
+	stub.listOptions = options
+
+	return stub.list, stub.listErr
 }
 
-func (stub *repositoryStub) Delete(_ context.Context, _ int64) error {
-	return nil
+func (stub *repositoryStub) Delete(_ context.Context, id int64) error {
+	stub.deleteID = id
+
+	return stub.deleteErr
 }
 
 func TestServiceCreateTrimsName(t *testing.T) {
@@ -56,5 +70,115 @@ func TestServiceCreateRejectsInvalidName(t *testing.T) {
 	_, err := service.Create(context.Background(), "   ")
 	if !errors.Is(err, ErrInvalidName) {
 		t.Fatalf("Create() error = %v, want ErrInvalidName", err)
+	}
+}
+
+func TestServiceCreateRejectsNameLongerThanMaximum(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(&repositoryStub{})
+
+	_, err := service.Create(context.Background(), string(make([]rune, maximumNameLength+1)))
+	if !errors.Is(err, ErrInvalidName) {
+		t.Fatalf("Create() error = %v, want ErrInvalidName", err)
+	}
+}
+
+func TestServicePreservesRepositoryErrors(t *testing.T) {
+	t.Parallel()
+
+	repositoryError := errors.New("repository failure")
+	tests := []struct {
+		name string
+		call func(*Service) error
+		stub *repositoryStub
+	}{
+		{
+			name: "create",
+			call: func(service *Service) error {
+				_, err := service.Create(context.Background(), "example")
+
+				return err
+			},
+			stub: &repositoryStub{createErr: repositoryError},
+		},
+		{
+			name: "get",
+			call: func(service *Service) error {
+				_, err := service.Get(context.Background(), 1)
+
+				return err
+			},
+			stub: &repositoryStub{getErr: repositoryError},
+		},
+		{
+			name: "list",
+			call: func(service *Service) error {
+				_, err := service.List(context.Background(), ListOptions{Limit: 10})
+
+				return err
+			},
+			stub: &repositoryStub{listErr: repositoryError},
+		},
+		{
+			name: "delete",
+			call: func(service *Service) error {
+				return service.Delete(context.Background(), 1)
+			},
+			stub: &repositoryStub{deleteErr: repositoryError},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if err := test.call(NewService(test.stub)); !errors.Is(err, repositoryError) {
+				t.Fatalf("operation error = %v, want wrapped repository error", err)
+			}
+		})
+	}
+}
+
+func TestServiceRejectsInvalidIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(&repositoryStub{})
+
+	if _, err := service.Get(context.Background(), 0); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Get() error = %v, want ErrNotFound", err)
+	}
+	if err := service.Delete(context.Background(), -1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Delete() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestServiceListAppliesDefaultLimit(t *testing.T) {
+	t.Parallel()
+
+	repository := &repositoryStub{list: []Widget{}}
+	service := NewService(repository)
+
+	if _, err := service.List(context.Background(), ListOptions{}); err != nil {
+		t.Fatalf("List() unexpected error: %v", err)
+	}
+	if repository.listOptions.Limit != defaultListLimit {
+		t.Fatalf("repository limit = %d, want %d", repository.listOptions.Limit, defaultListLimit)
+	}
+}
+
+func TestServiceListRejectsInvalidPagination(t *testing.T) {
+	t.Parallel()
+
+	tests := []ListOptions{
+		{Limit: -1},
+		{Limit: maximumListLimit + 1},
+		{Limit: 1, Offset: -1},
+	}
+
+	for _, options := range tests {
+		if _, err := NewService(&repositoryStub{}).List(context.Background(), options); !errors.Is(err, ErrInvalidPagination) {
+			t.Errorf("List(%+v) error = %v, want ErrInvalidPagination", options, err)
+		}
 	}
 }

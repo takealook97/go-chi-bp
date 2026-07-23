@@ -42,12 +42,14 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {
 
 // WriteJSON writes a JSON response with the supplied HTTP status.
 func WriteJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-
 	if status == http.StatusNoContent || payload == nil {
+		w.WriteHeader(status)
+
 		return
 	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
 
 	_ = json.NewEncoder(w).Encode(payload)
 }

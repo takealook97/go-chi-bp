@@ -64,6 +64,21 @@ that explains the concrete trade-off.
 - Log an error once at the boundary responsible for handling it.
 - Metrics and traces must use low-cardinality attributes.
 
+## Testing
+
+- Test business rules at the service boundary and transport behavior at the HTTP
+  boundary.
+- Every public endpoint covers its success response and stable error mappings.
+- Database integration tests apply real migrations and execute generated queries
+  against PostgreSQL; repository mocks do not replace this verification.
+- Integration tests isolate their data and must not depend on execution order.
+- Contract linting and implementation tests serve different purposes; passing an
+  OpenAPI linter does not prove that handlers implement the contract.
+- Tests may skip an external integration only when its documented environment
+  variable is absent. CI must provide required integrations.
+- Prefer behavioral assertions over implementation details and keep test failure
+  messages free of credentials and sensitive configuration.
+
 ## Configuration and secrets
 
 - Configuration comes from environment variables and is validated at startup.

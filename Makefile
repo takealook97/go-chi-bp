@@ -19,7 +19,7 @@ VACUUM_VERSION := v0.29.9
 
 .DEFAULT_GOAL := help
 
-.PHONY: help tools hooks run build test test-race fmt fmt-check lint vet openapi-check sqlc sqlc-check \
+.PHONY: help tools hooks run build test test-race test-integration fmt fmt-check lint vet openapi-check sqlc sqlc-check \
 	check clean db-up db-down migrate-up migrate-down migrate-status
 
 help: ## Show available commands.
@@ -57,6 +57,10 @@ test: ## Run all unit tests.
 
 test-race: ## Run all tests with the race detector.
 	go test -race ./...
+
+test-integration: ## Run PostgreSQL integration tests against TEST_DATABASE_URL.
+	@test -n "$(TEST_DATABASE_URL)" || { echo "TEST_DATABASE_URL is required"; exit 1; }
+	go test -race -count=1 -run Integration ./internal/platform/database ./internal/widget
 
 fmt: $(GOLANGCI_LINT) ## Format Go source files.
 	$(GOLANGCI_LINT) fmt

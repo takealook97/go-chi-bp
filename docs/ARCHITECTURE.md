@@ -80,3 +80,13 @@ already clean:
 - it needs a materially different availability target;
 - its release cadence conflicts with the rest of the application.
 
+Extraction is a staged operational change, not a package move. The capability
+must have clean application and data ownership boundaries, contract tests,
+measurable service objectives, and an identified operator before a network seam
+is introduced. Follow the [Microservice Evolution Guide](MICROSERVICES.md) for
+the required ADR, data migration, traffic cutover, reliability, security, and
+rollback process.
+
+Until an extraction is approved, do not add remote-call abstractions, messaging,
+service discovery, distributed tracing vendors, or deployment units for
+hypothetical services.
