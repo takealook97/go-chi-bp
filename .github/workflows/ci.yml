@@ -45,6 +45,8 @@ jobs:
         with:
           path: bin
           key: ${{ runner.os }}-${{ runner.arch }}-tools-${{ hashFiles('Makefile') }}
+      - name: Install pinned tools
+        run: make -j4 check-tools
       - name: Run checks
         run: make check
       - name: Build production container

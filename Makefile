@@ -12,6 +12,7 @@ GOOSE := $(BIN_DIR)/goose
 GOLANGCI_LINT := $(BIN_DIR)/golangci-lint
 VACUUM := $(BIN_DIR)/vacuum
 GOVULNCHECK := $(BIN_DIR)/govulncheck
+CHECK_TOOLS := $(SQLC) $(GOLANGCI_LINT) $(VACUUM) $(GOVULNCHECK)
 
 SQLC_VERSION := v1.31.1
 GOOSE_VERSION := v3.27.2
@@ -22,13 +23,15 @@ COVERAGE_MIN := 80.0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help tools hooks run build docker-build test test-race test-integration cover cover-check fmt fmt-check lint vet vuln \
+.PHONY: help tools check-tools hooks run build docker-build test test-race test-integration cover cover-check fmt fmt-check lint vet vuln \
 	tidy-check openapi-check sqlc sqlc-check check clean db-up db-down migrate-up migrate-down migrate-status
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*## "; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-tools: $(SQLC) $(GOOSE) $(GOLANGCI_LINT) $(VACUUM) $(GOVULNCHECK) ## Install pinned development tools locally.
+tools: $(CHECK_TOOLS) $(GOOSE) ## Install all pinned development tools locally.
+
+check-tools: $(CHECK_TOOLS) ## Install the pinned tools required by make check.
 
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
