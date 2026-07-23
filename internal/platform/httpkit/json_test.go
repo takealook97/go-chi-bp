@@ -59,7 +59,9 @@ func TestWriteJSONNoContentOmitsContentType(t *testing.T) {
 
 	response := httptest.NewRecorder()
 
-	WriteJSON(response, http.StatusNoContent, nil)
+	if err := WriteJSON(response, http.StatusNoContent, nil); err != nil {
+		t.Fatalf("WriteJSON() unexpected error: %v", err)
+	}
 
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusNoContent)
@@ -69,6 +71,26 @@ func TestWriteJSONNoContentOmitsContentType(t *testing.T) {
 	}
 	if response.Body.Len() != 0 {
 		t.Fatalf("body = %q, want empty", response.Body.String())
+	}
+}
+
+func TestWriteJSONReturnsSafeErrorResponseWhenEncodingFails(t *testing.T) {
+	t.Parallel()
+
+	response := httptest.NewRecorder()
+
+	err := WriteJSON(response, http.StatusCreated, map[string]any{
+		"unsupported": make(chan int),
+	})
+
+	if err == nil {
+		t.Fatal("WriteJSON() error = nil, want an error")
+	}
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusInternalServerError)
+	}
+	if response.Body.String() != internalErrorJSON {
+		t.Fatalf("body = %q, want %q", response.Body.String(), internalErrorJSON)
 	}
 }
 

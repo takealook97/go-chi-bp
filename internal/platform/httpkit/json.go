@@ -9,7 +9,10 @@ import (
 	"net/http"
 )
 
-const maxRequestBodyBytes = 1 << 20
+const (
+	maxRequestBodyBytes = 1 << 20
+	internalErrorJSON   = "{\"error\":{\"code\":\"internal_error\",\"message\":\"An internal error occurred.\"}}\n"
+)
 
 // ErrorResponse is the stable public error envelope.
 type ErrorResponse struct {
@@ -40,23 +43,39 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {
 	return nil
 }
 
-// WriteJSON writes a JSON response with the supplied HTTP status.
-func WriteJSON(w http.ResponseWriter, status int, payload any) {
+// WriteJSON writes a JSON response or a safe internal error when encoding fails.
+func WriteJSON(w http.ResponseWriter, status int, payload any) error {
 	if status == http.StatusNoContent || payload == nil {
 		w.WriteHeader(status)
 
-		return
+		return nil
 	}
 
+	body, err := json.Marshal(payload)
+	if err != nil {
+		writeErr := writeJSONBytes(w, http.StatusInternalServerError, []byte(internalErrorJSON))
+
+		return errors.Join(fmt.Errorf("encode JSON response: %w", err), writeErr)
+	}
+	body = append(body, '\n')
+
+	return writeJSONBytes(w, status, body)
+}
+
+func writeJSONBytes(w http.ResponseWriter, status int, body []byte) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 
-	_ = json.NewEncoder(w).Encode(payload)
+	if _, err := w.Write(body); err != nil {
+		return fmt.Errorf("write JSON response: %w", err)
+	}
+
+	return nil
 }
 
 // WriteError writes the stable public error envelope.
 func WriteError(w http.ResponseWriter, status int, code, message string) {
-	WriteJSON(w, status, ErrorResponse{
+	_ = WriteJSON(w, status, ErrorResponse{
 		Error: APIError{
 			Code:    code,
 			Message: message,

@@ -79,7 +79,7 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpkit.WriteJSON(w, http.StatusCreated, widgetToResponse(result))
+	handler.writeJSON(w, r, http.StatusCreated, widgetToResponse(result))
 }
 
 func (handler *Handler) get(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +102,7 @@ func (handler *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpkit.WriteJSON(w, http.StatusOK, widgetToResponse(result))
+	handler.writeJSON(w, r, http.StatusOK, widgetToResponse(result))
 }
 
 func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -142,7 +142,7 @@ func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 		nextCursor = &encoded
 	}
 
-	httpkit.WriteJSON(w, http.StatusOK, widgetListResponse{Items: items, Limit: limit, NextCursor: nextCursor})
+	handler.writeJSON(w, r, http.StatusOK, widgetListResponse{Items: items, Limit: limit, NextCursor: nextCursor})
 }
 
 func (handler *Handler) delete(w http.ResponseWriter, r *http.Request) {
@@ -163,12 +163,18 @@ func (handler *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpkit.WriteJSON(w, http.StatusNoContent, nil)
+	handler.writeJSON(w, r, http.StatusNoContent, nil)
 }
 
 func (handler *Handler) internalError(w http.ResponseWriter, r *http.Request, operation string, err error) {
 	handler.logger.ErrorContext(r.Context(), "HTTP request failed", "operation", operation, "error", err)
 	httpkit.WriteError(w, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
+}
+
+func (handler *Handler) writeJSON(w http.ResponseWriter, r *http.Request, status int, payload any) {
+	if err := httpkit.WriteJSON(w, status, payload); err != nil {
+		handler.logger.ErrorContext(r.Context(), "HTTP response failed", "status", status, "error", err)
+	}
 }
 
 func pathID(r *http.Request) (int64, error) {

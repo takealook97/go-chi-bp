@@ -43,7 +43,7 @@ func NewRouter(logger *slog.Logger, readinessCheck ReadinessCheck, widgetHandler
 }
 
 func liveness(w http.ResponseWriter, _ *http.Request) {
-	httpkit.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	_ = httpkit.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func readiness(check ReadinessCheck) http.HandlerFunc {
@@ -57,6 +57,6 @@ func readiness(check ReadinessCheck) http.HandlerFunc {
 			return
 		}
 
-		httpkit.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		_ = httpkit.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
