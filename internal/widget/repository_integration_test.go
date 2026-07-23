@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	dbgen "github.com/lukuku-dev/go-chi-bp/internal/database/sqlc"
+	dbgen "github.com/lukuku-dev/go-chi-bp/internal/widget/dbgen"
 )
 
 func TestPostgresRepositoryIntegration(t *testing.T) {

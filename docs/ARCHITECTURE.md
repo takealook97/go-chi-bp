@@ -10,8 +10,8 @@ or availability requirements justify the operational cost.
 cmd/api                 Composition root
 internal/httpapi        HTTP router and cross-cutting HTTP behavior
 internal/platform       Technical adapters shared by modules
-internal/<capability>   Vertical business module
-internal/database/sqlc  Generated database access code
+internal/<capability>         Vertical business module
+internal/<capability>/dbgen   Module-owned generated database access code
 db/migrations           Versioned database schema changes
 db/queries              SQL consumed by sqlc
 api                     Public OpenAPI contract
@@ -54,9 +54,9 @@ ownership remains module-specific. Cross-module joins are prohibited in command
 paths. Purpose-built read models may join data when explicitly documented and
 kept read-only.
 
-All SQL is visible and version controlled. sqlc generates typed access code; it
-does not define domain boundaries. Generated structs must not leak through the
-service or HTTP API layers.
+All SQL is visible and version controlled. sqlc generates typed access code
+inside the owning module; it does not define domain boundaries. Generated
+structs must not leak through the service or HTTP API layers.
 
 ## Transactions
 

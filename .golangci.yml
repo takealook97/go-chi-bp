@@ -24,14 +24,16 @@ linters:
         business-layer:
           list-mode: lax
           files:
-            - "**/internal/*/model.go"
-            - "**/internal/*/service.go"
+            - "**/internal/widget/*.go"
+            - "!**/internal/widget/handler.go"
+            - "!**/internal/widget/repository.go"
+            - "!$test"
           deny:
             - pkg: github.com/go-chi/chi/v5
               desc: business code must not depend on the HTTP router
             - pkg: github.com/jackc/pgx/v5
               desc: business code must not depend on the PostgreSQL driver
-            - pkg: github.com/lukuku-dev/go-chi-bp/internal/database/sqlc
+            - pkg: github.com/lukuku-dev/go-chi-bp/internal/widget/dbgen
               desc: generated database code must stay behind repositories
             - pkg: github.com/lukuku-dev/go-chi-bp/internal/platform/config
               desc: business code must receive validated values through constructors

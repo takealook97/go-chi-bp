@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	dbgen "github.com/lukuku-dev/go-chi-bp/internal/database/sqlc"
+	dbgen "github.com/lukuku-dev/go-chi-bp/internal/widget/dbgen"
 )
 
 // PostgresRepository persists widgets in PostgreSQL.

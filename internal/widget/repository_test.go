@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	dbgen "github.com/lukuku-dev/go-chi-bp/internal/database/sqlc"
+	dbgen "github.com/lukuku-dev/go-chi-bp/internal/widget/dbgen"
 )
 
 func TestWidgetFromDatabaseNormalizesTimestampsToUTC(t *testing.T) {

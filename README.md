@@ -30,7 +30,8 @@ caching, queues, email, and vendor integrations are intentionally excluded.
    gofmt -w .
    ```
 
-3. Rename the `widget` example module to the first real business capability.
+3. Rename the `widget` example module to the first real business capability,
+   including its sqlc output path and depguard file rules.
 4. Update `api/openapi.yaml`, migrations, queries, and generated code together.
 5. Run `make check` before the first commit.
 

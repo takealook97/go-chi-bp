@@ -29,7 +29,7 @@ If port `5432` is already in use, change both `POSTGRES_PORT` and the port in
 4. Add repository and service tests.
 5. Run `make check`.
 
-Never edit files under `internal/database/sqlc` manually.
+Never edit files under a module's generated `dbgen` directory manually.
 
 ## Testing
 
@@ -78,6 +78,7 @@ Create `internal/<capability>` as a vertical slice. A typical module contains:
 
 ```text
 internal/orders/
+  dbgen/         Generated database access code, when required
   model.go       Domain and application data
   service.go     Use cases and consumed interfaces
   repository.go  PostgreSQL adapter, when required
@@ -90,7 +91,8 @@ Small modules should stay small. Do not create empty `domain`, `usecase`,
 
 The depguard rules in `.golangci.yml` mechanically keep router, database,
 generated SQL, and environment packages out of business model and service
-files. Extend those rules when adding a new technical adapter or module layout.
+files. Extend those rules when adding or renaming a module or introducing a new
+technical adapter or file layout.
 
 Before turning a module into a service, keep it in-process and follow the
 [Microservice Evolution Guide](MICROSERVICES.md). Boundary hardening and contract

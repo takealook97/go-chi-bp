@@ -95,8 +95,7 @@ vuln: $(GOVULNCHECK) ## Check reachable code for known Go vulnerabilities.
 	$(GOVULNCHECK) ./...
 
 tidy-check: ## Verify go.mod and go.sum are tidy.
-	go mod tidy
-	git diff --exit-code -- go.mod go.sum
+	go mod tidy -diff
 
 openapi-check: $(VACUUM) ## Validate and lint the OpenAPI contract.
 	$(VACUUM) lint -d api/openapi.yaml
@@ -105,8 +104,11 @@ sqlc: $(SQLC) ## Generate type-safe database code.
 	$(SQLC) generate
 
 sqlc-check: $(SQLC) ## Verify generated database code is current.
-	$(SQLC) generate
-	git diff --exit-code -- internal/database/sqlc
+	@temp_dir="$$(mktemp -d)"; trap 'rm -rf "$$temp_dir"' EXIT; \
+		cp -R db "$$temp_dir/db"; \
+		cp sqlc.yaml "$$temp_dir/sqlc.yaml"; \
+		cd "$$temp_dir" && $(SQLC) generate; \
+		diff -ru "$$temp_dir/internal/widget/dbgen" "$(CURDIR)/internal/widget/dbgen"
 
 check: fmt-check tidy-check sqlc-check openapi-check vet lint vuln test-race cover-check build ## Run all required local and CI checks.
 	@if test -z "$(TEST_DATABASE_URL)"; then echo "NOTE: PostgreSQL integration tests were skipped because TEST_DATABASE_URL is not set."; fi

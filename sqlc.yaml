@@ -6,7 +6,7 @@ sql:
     gen:
       go:
         package: dbgen
-        out: internal/database/sqlc
+        out: internal/widget/dbgen
         sql_package: pgx/v5
         emit_empty_slices: true
         emit_exact_table_names: false
