@@ -85,6 +85,7 @@ sqlc-check: $(SQLC) ## Verify generated database code is current.
 	git diff --exit-code -- internal/database/sqlc
 
 check: fmt-check sqlc-check openapi-check vet lint test-race build ## Run all required local and CI checks.
+	@if test -z "$(TEST_DATABASE_URL)"; then echo "NOTE: PostgreSQL integration tests were skipped because TEST_DATABASE_URL is not set."; fi
 
 clean: ## Remove local build and tool artifacts.
 	rm -rf $(BIN_DIR) coverage.out coverage.html

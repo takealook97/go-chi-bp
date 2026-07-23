@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"net/http"
@@ -66,6 +67,27 @@ func TestRecoverPanicDoesNotAppendErrorAfterResponseStarts(t *testing.T) {
 	}
 	if response.Body.String() != "partial" {
 		t.Fatalf("body = %q, want partial response without an appended JSON error", response.Body.String())
+	}
+}
+
+func TestRecoverPanicDoesNotLogPanicValue(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	handler := recoverPanic(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("sensitive panic value")
+	}))
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if strings.Contains(output.String(), "sensitive panic value") {
+		t.Fatalf("panic log contains recovered value: %s", output.String())
+	}
+	if !strings.Contains(output.String(), "HTTP handler panicked") {
+		t.Fatalf("panic log = %q, want recovery event", output.String())
 	}
 }
 

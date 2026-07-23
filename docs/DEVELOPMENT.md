@@ -57,7 +57,14 @@ the remaining local checks still run.
 
 `make check` remains the merge gate. It verifies formatting, generated sqlc
 output, OpenAPI quality, vet and lint findings, race-tested behavior, and the
-production binary build.
+production binary build. It prints an explicit note when `TEST_DATABASE_URL` is
+absent and PostgreSQL integration tests were therefore skipped. CI always sets
+the variable.
+
+The HTTP test suite also compares every OpenAPI path and method with the routes
+registered by Chi. This catches undocumented endpoints and documented endpoints
+that are not wired into the application. Endpoint tests remain responsible for
+verifying response status codes and payload behavior.
 
 ## Adding a module
 

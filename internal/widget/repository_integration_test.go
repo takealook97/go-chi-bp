@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -55,9 +56,11 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	}
 	defer pool.Close()
 
-	upMigration, downMigration := readWidgetMigration(t)
-	if _, err := pool.Exec(ctx, upMigration); err != nil {
-		t.Fatalf("apply widget migration: %v", err)
+	migrations := readMigrations(t)
+	for _, migration := range migrations {
+		if _, err := pool.Exec(ctx, migration.up); err != nil {
+			t.Fatalf("apply migration %s: %v", migration.name, err)
+		}
 	}
 
 	repository := NewPostgresRepository(dbgen.New(pool))
@@ -95,8 +98,11 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		t.Fatalf("Get() after delete error = %v, want ErrNotFound", err)
 	}
 
-	if _, err := pool.Exec(ctx, downMigration); err != nil {
-		t.Fatalf("roll back widget migration: %v", err)
+	for index := len(migrations) - 1; index >= 0; index-- {
+		migration := migrations[index]
+		if _, err := pool.Exec(ctx, migration.down); err != nil {
+			t.Fatalf("roll back migration %s: %v", migration.name, err)
+		}
 	}
 	var tableName *string
 	if err := pool.QueryRow(ctx, "SELECT to_regclass('widgets')::text").Scan(&tableName); err != nil {
@@ -118,22 +124,62 @@ func randomHex(t *testing.T, byteCount int) string {
 	return hex.EncodeToString(buffer)
 }
 
-func readWidgetMigration(t *testing.T) (string, string) {
+type migrationSQL struct {
+	name string
+	up   string
+	down string
+}
+
+func readMigrations(t *testing.T) []migrationSQL {
 	t.Helper()
 
-	contents, err := os.ReadFile("../../db/migrations/00001_create_widgets.sql")
+	root, err := os.OpenRoot("../../db/migrations")
 	if err != nil {
-		t.Fatalf("read widget migration: %v", err)
+		t.Fatalf("open migration directory: %v", err)
+	}
+	defer func() {
+		if closeErr := root.Close(); closeErr != nil {
+			t.Errorf("close migration directory: %v", closeErr)
+		}
+	}()
+
+	entries, err := os.ReadDir("../../db/migrations")
+	if err != nil {
+		t.Fatalf("read migration directory: %v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+			names = append(names, entry.Name())
+		}
+	}
+	sort.Strings(names)
+	if len(names) == 0 {
+		t.Fatal("no migrations found")
 	}
 
-	afterUp, found := strings.CutPrefix(string(contents), "-- +goose Up")
-	if !found {
-		t.Fatal("widget migration is missing the Goose Up marker")
-	}
-	upMigration, downMigration, found := strings.Cut(afterUp, "-- +goose Down")
-	if !found || strings.TrimSpace(upMigration) == "" || strings.TrimSpace(downMigration) == "" {
-		t.Fatal("widget migration must contain non-empty up and down sections")
+	migrations := make([]migrationSQL, 0, len(names))
+	for _, name := range names {
+		contents, readErr := root.ReadFile(name)
+		if readErr != nil {
+			t.Fatalf("read migration %s: %v", name, readErr)
+		}
+
+		afterUp, found := strings.CutPrefix(string(contents), "-- +goose Up")
+		if !found {
+			t.Fatalf("migration %s is missing the Goose Up marker", name)
+		}
+		upMigration, downMigration, found := strings.Cut(afterUp, "-- +goose Down")
+		if !found || strings.TrimSpace(upMigration) == "" || strings.TrimSpace(downMigration) == "" {
+			t.Fatalf("migration %s must contain non-empty up and down sections", name)
+		}
+
+		migrations = append(migrations, migrationSQL{
+			name: name,
+			up:   upMigration,
+			down: downMigration,
+		})
 	}
 
-	return upMigration, downMigration
+	return migrations
 }

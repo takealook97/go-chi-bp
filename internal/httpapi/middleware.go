@@ -50,7 +50,6 @@ func recoverPanic(logger *slog.Logger) func(http.Handler) http.Handler {
 						ctx,
 						"HTTP handler panicked",
 						"requestID", middleware.GetReqID(ctx),
-						"panic", recovered,
 						"stack", string(debug.Stack()),
 					)
 					statusWriter, ok := w.(interface{ Status() int })
