@@ -2,6 +2,7 @@ package httpkit
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,13 +26,14 @@ func TestDecodeJSON(t *testing.T) {
 			t.Parallel()
 
 			request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(test.body))
+			request.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
 			var destination struct {
 				Name string `json:"name"`
 			}
 
-			if err := DecodeJSON(response, request, &destination); err == nil {
-				t.Fatal("DecodeJSON() error = nil, want decoding error")
+			if err := NewJSONDecoder(1<<20).Decode(response, request, &destination); err == nil {
+				t.Fatal("Decode() error = nil, want decoding error")
 			}
 		})
 	}
@@ -41,16 +43,65 @@ func TestDecodeJSONAcceptsOneStrictValue(t *testing.T) {
 	t.Parallel()
 
 	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"name":"example"}`))
+	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	var destination struct {
 		Name string `json:"name"`
 	}
 
-	if err := DecodeJSON(response, request, &destination); err != nil {
-		t.Fatalf("DecodeJSON() unexpected error: %v", err)
+	if err := NewJSONDecoder(1<<20).Decode(response, request, &destination); err != nil {
+		t.Fatalf("Decode() unexpected error: %v", err)
 	}
 	if destination.Name != "example" {
 		t.Fatalf("name = %q, want example", destination.Name)
+	}
+}
+
+func TestJSONDecoderRejectsUnsupportedMediaType(t *testing.T) {
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"name":"example"}`))
+	request.Header.Set("Content-Type", "text/plain")
+	response := httptest.NewRecorder()
+
+	err := NewJSONDecoder(1<<20).Decode(response, request, &struct{}{})
+	if !errors.Is(err, ErrUnsupportedMediaType) {
+		t.Fatalf("Decode() error = %v, want ErrUnsupportedMediaType", err)
+	}
+}
+
+func TestJSONDecoderRejectsOversizedBody(t *testing.T) {
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"name":"example"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	err := NewJSONDecoder(4).Decode(response, request, &struct{}{})
+	var maxBytesError *http.MaxBytesError
+	if !errors.As(err, &maxBytesError) {
+		t.Fatalf("Decode() error = %v, want MaxBytesError", err)
+	}
+}
+
+func TestJSONDecoderReturnsStableFieldViolations(t *testing.T) {
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"name":""}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	var destination struct {
+		Name string `json:"name" validate:"required"`
+	}
+
+	err := NewJSONDecoder(1<<20).Decode(response, request, &destination)
+	var validationError *ValidationError
+	if !errors.As(err, &validationError) {
+		t.Fatalf("Decode() error = %v, want ValidationError", err)
+	}
+	if len(validationError.Fields) != 1 ||
+		validationError.Fields[0] != (FieldViolation{Field: "name", Rule: "required"}) {
+		t.Fatalf("violations = %+v, want name required", validationError.Fields)
 	}
 }
 

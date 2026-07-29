@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/lukuku-dev/go-chi-bp/internal/httpapi/apigen"
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
 )
 
@@ -20,15 +21,16 @@ import (
 type Handler struct {
 	service *Service
 	logger  *slog.Logger
+	decoder *httpkit.JSONDecoder
 }
 
 // NewHandler constructs a widget HTTP handler.
-func NewHandler(service *Service, logger *slog.Logger) *Handler {
-	if service == nil || logger == nil {
+func NewHandler(service *Service, logger *slog.Logger, decoder *httpkit.JSONDecoder) *Handler {
+	if service == nil || logger == nil || decoder == nil {
 		panic("widget handler dependencies must not be nil")
 	}
 
-	return &Handler{service: service, logger: logger}
+	return &Handler{service: service, logger: logger, decoder: decoder}
 }
 
 // Router returns the widget HTTP routes.
@@ -42,27 +44,29 @@ func (handler *Handler) Router() chi.Router {
 	return router
 }
 
-type createWidgetRequest struct {
-	Name string `json:"name"`
-}
-
-type widgetResponse struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-}
-
-type widgetListResponse struct {
-	Items      []widgetResponse `json:"items"`
-	Limit      int32            `json:"limit"`
-	NextCursor *string          `json:"nextCursor"`
-}
-
 func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
-	var request createWidgetRequest
-	if err := httpkit.DecodeJSON(w, r, &request); err != nil {
-		httpkit.WriteError(w, http.StatusBadRequest, "invalid_request", "The request body is invalid.")
+	var request apigen.CreateWidgetJSONRequestBody
+	if err := handler.decoder.Decode(w, r, &request); err != nil {
+		var (
+			maxBytesError   *http.MaxBytesError
+			validationError *httpkit.ValidationError
+		)
+		switch {
+		case errors.Is(err, httpkit.ErrUnsupportedMediaType):
+			httpkit.WriteError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be application/json.")
+		case errors.As(err, &maxBytesError):
+			httpkit.WriteError(w, http.StatusRequestEntityTooLarge, "request_too_large", "The request body is too large.")
+		case errors.As(err, &validationError):
+			httpkit.WriteErrorDetails(
+				w,
+				http.StatusUnprocessableEntity,
+				"validation_failed",
+				"Request validation failed.",
+				map[string]any{"fields": validationError.Fields},
+			)
+		default:
+			httpkit.WriteError(w, http.StatusBadRequest, "invalid_request", "The request body is invalid.")
+		}
 
 		return
 	}
@@ -131,7 +135,7 @@ func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]widgetResponse, 0, len(page.Items))
+	items := make([]apigen.Widget, 0, len(page.Items))
 	for _, result := range page.Items {
 		items = append(items, widgetToResponse(result))
 	}
@@ -142,7 +146,7 @@ func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 		nextCursor = &encoded
 	}
 
-	handler.writeJSON(w, r, http.StatusOK, widgetListResponse{Items: items, Limit: limit, NextCursor: nextCursor})
+	handler.writeJSON(w, r, http.StatusOK, apigen.WidgetList{Items: items, Limit: limit, NextCursor: nextCursor})
 }
 
 func (handler *Handler) delete(w http.ResponseWriter, r *http.Request) {
@@ -224,6 +228,11 @@ func decodeListCursor(value string) (*ListCursor, error) {
 	return &ListCursor{CreatedAt: createdAt.UTC(), ID: id}, nil
 }
 
-func widgetToResponse(value Widget) widgetResponse {
-	return widgetResponse(value)
+func widgetToResponse(value Widget) apigen.Widget {
+	return apigen.Widget{
+		ID:        value.ID,
+		Name:      value.Name,
+		CreatedAt: value.CreatedAt,
+		UpdatedAt: value.UpdatedAt,
+	}
 }

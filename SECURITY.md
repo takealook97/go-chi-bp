@@ -14,6 +14,8 @@ contact or disclosure URL before making the derived repository public.
 - Terminate TLS at a trusted ingress or load balancer.
 - Configure trusted proxy headers at deployment time; do not trust arbitrary
   forwarded IP headers in the application by default.
+- Use an explicit CORS origin allowlist. Never combine wildcard origins with
+  credentialed browser requests.
 - Keep secrets in the deployment platform's secret manager.
 - Apply least-privilege database credentials and network policies.
 - Avoid logging authentication data, personal data, and payment data.

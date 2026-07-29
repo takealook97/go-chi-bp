@@ -5,26 +5,30 @@ include .env
 export
 endif
 
-BIN_DIR := $(CURDIR)/bin
+HOST_OS := $(shell go env GOHOSTOS)
+HOST_ARCH := $(shell go env GOHOSTARCH)
+BIN_DIR := $(CURDIR)/bin/$(HOST_OS)-$(HOST_ARCH)
 API_BIN := $(BIN_DIR)/api
 SQLC := $(BIN_DIR)/sqlc
 GOOSE := $(BIN_DIR)/goose
 GOLANGCI_LINT := $(BIN_DIR)/golangci-lint
 VACUUM := $(BIN_DIR)/vacuum
 GOVULNCHECK := $(BIN_DIR)/govulncheck
-CHECK_TOOLS := $(SQLC) $(GOLANGCI_LINT) $(VACUUM) $(GOVULNCHECK)
+OAPI_CODEGEN := $(BIN_DIR)/oapi-codegen
+CHECK_TOOLS := $(SQLC) $(GOLANGCI_LINT) $(VACUUM) $(GOVULNCHECK) $(OAPI_CODEGEN)
 
 SQLC_VERSION := v1.31.1
 GOOSE_VERSION := v3.27.2
 GOLANGCI_LINT_VERSION := v2.12.2
 VACUUM_VERSION := v0.29.9
 GOVULNCHECK_VERSION := v1.6.0
+OAPI_CODEGEN_VERSION := v2.8.0
 COVERAGE_MIN := 80.0
 
 .DEFAULT_GOAL := help
 
 .PHONY: help tools check-tools hooks run build docker-build test test-race test-integration cover cover-check fmt fmt-check lint vet vuln \
-	tidy-check openapi-check sqlc sqlc-check check clean db-up db-down migrate-up migrate-down migrate-status
+	tidy-check openapi openapi-check sqlc sqlc-check check clean db-up db-down migrate-up migrate-down migrate-status
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*## "; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -50,6 +54,9 @@ $(VACUUM): | $(BIN_DIR)
 
 $(GOVULNCHECK): | $(BIN_DIR)
 	GOBIN=$(BIN_DIR) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+
+$(OAPI_CODEGEN): | $(BIN_DIR)
+	GOBIN=$(BIN_DIR) go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
 
 hooks: ## Enable repository-managed Git hooks.
 	git config core.hooksPath .githooks
@@ -100,8 +107,14 @@ vuln: $(GOVULNCHECK) ## Check reachable code for known Go vulnerabilities.
 tidy-check: ## Verify go.mod and go.sum are tidy.
 	go mod tidy -diff
 
-openapi-check: $(VACUUM) ## Validate and lint the OpenAPI contract.
+openapi: $(OAPI_CODEGEN) ## Generate HTTP contract types from OpenAPI.
+	$(OAPI_CODEGEN) --config api/oapi-codegen.yaml -o internal/httpapi/apigen/types.gen.go api/openapi.yaml
+
+openapi-check: $(VACUUM) $(OAPI_CODEGEN) ## Validate OpenAPI and verify generated contract types.
 	$(VACUUM) lint -d api/openapi.yaml
+	@temp_file="$$(mktemp)"; trap 'rm -f "$$temp_file"' EXIT; \
+		$(OAPI_CODEGEN) --config api/oapi-codegen.yaml -o "$$temp_file" api/openapi.yaml; \
+		diff -u "$$temp_file" internal/httpapi/apigen/types.gen.go
 
 sqlc: $(SQLC) ## Generate type-safe database code.
 	$(SQLC) generate

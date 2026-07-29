@@ -12,6 +12,7 @@ import (
 	"github.com/lukuku-dev/go-chi-bp/internal/httpapi"
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/config"
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/database"
+	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpserver"
 	"github.com/lukuku-dev/go-chi-bp/internal/widget"
 	dbgen "github.com/lukuku-dev/go-chi-bp/internal/widget/dbgen"
@@ -45,9 +46,21 @@ func run() error {
 	queries := dbgen.New(pool)
 	widgetRepository := widget.NewPostgresRepository(queries)
 	widgetService := widget.NewService(widgetRepository)
-	widgetHandler := widget.NewHandler(widgetService, logger)
+	jsonDecoder := httpkit.NewJSONDecoder(cfg.HTTP.MaxRequestBytes)
+	widgetHandler := widget.NewHandler(widgetService, logger, jsonDecoder)
 
-	router := httpapi.NewRouter(logger, pool.Ping, widgetHandler)
+	router := httpapi.NewRouter(logger, pool.Ping, widgetHandler, httpapi.Options{
+		CORS: httpapi.CORSOptions{
+			AllowedOrigins:   cfg.HTTP.CORS.AllowedOrigins,
+			AllowCredentials: cfg.HTTP.CORS.AllowCredentials,
+		},
+		ClientIP: httpapi.ClientIPOptions{
+			Mode:              cfg.HTTP.ClientIP.Mode,
+			TrustedHeader:     cfg.HTTP.ClientIP.TrustedHeader,
+			TrustedProxyCIDRs: cfg.HTTP.ClientIP.TrustedProxyCIDRs,
+			TrustedProxyCount: cfg.HTTP.ClientIP.TrustedProxyCount,
+		},
+	})
 	server := httpserver.New(cfg.HTTP, router, logger)
 
 	if err := httpserver.Run(ctx, server, cfg.ShutdownTimeout, logger); err != nil {

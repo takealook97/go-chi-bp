@@ -9,6 +9,7 @@ or availability requirements justify the operational cost.
 ```text
 cmd/api                 Composition root
 internal/httpapi        HTTP router and cross-cutting HTTP behavior
+internal/httpapi/apigen Generated public-contract boundary types
 internal/platform       Technical adapters shared by modules
 internal/<capability>         Vertical business module
 internal/<capability>/dbgen   Module-owned generated database access code
@@ -70,8 +71,9 @@ service.
 ## HTTP contract
 
 `api/openapi.yaml` is the public contract. Handlers implement it; database models
-do not define it. Breaking changes require a new API version or a documented
-migration path.
+do not define it. Generated OpenAPI types remain at the HTTP boundary and are
+mapped explicitly to application models. Breaking changes require a new API
+version or a documented migration path.
 
 ## Extraction criteria
 

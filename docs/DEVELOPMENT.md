@@ -31,6 +31,17 @@ If port `5432` is already in use, change both `POSTGRES_PORT` and the port in
 
 Never edit files under a module's generated `dbgen` directory manually.
 
+## HTTP contract workflow
+
+1. Update `api/openapi.yaml`.
+2. Run `make openapi` to regenerate boundary request and response types.
+3. Implement or update the HTTP adapter and behavioral tests.
+4. Run `make openapi-check` to lint the contract and detect generated-code
+   drift.
+
+Never edit `internal/httpapi/apigen/types.gen.go` manually. Generated types stay
+at the HTTP boundary and must not become domain or database models.
+
 ## Testing
 
 The default test command runs unit tests without requiring external services:
@@ -54,8 +65,8 @@ provides PostgreSQL and sets `TEST_DATABASE_URL`, so `make check` exercises the
 integration path there. Without that variable, the integration test skips and
 the remaining local checks still run.
 
-`make check` remains the merge gate. It verifies formatting, generated sqlc
-output, tidy module files, OpenAPI quality, vet and lint findings, reachable
+`make check` remains the merge gate. It verifies formatting, generated sqlc and
+OpenAPI output, tidy module files, OpenAPI quality, vet and lint findings, reachable
 dependency vulnerabilities, race-tested behavior, and the production binary
 build. CI additionally builds the production container image. The check prints
 an explicit note when `TEST_DATABASE_URL` is absent and PostgreSQL integration

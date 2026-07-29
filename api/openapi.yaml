@@ -103,6 +103,8 @@ paths:
                   minLength: 1
                   maxLength: 120
                   example: first widget
+                  x-oapi-codegen-extra-tags:
+                    validate: required,max=120
             example:
               name: first widget
       responses:
@@ -119,6 +121,10 @@ paths:
                 updatedAt: "2026-07-10T10:00:00Z"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/RequestTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
         "500":
@@ -261,15 +267,39 @@ components:
               code: invalid_request
               message: The request is invalid.
     UnprocessableEntity:
-      description: The request violates a business rule.
+      description: The request violates input or business constraints.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
           example:
             error:
-              code: invalid_widget_name
-              message: Name must contain 1 to 120 characters.
+              code: validation_failed
+              message: Request validation failed.
+              details:
+                fields:
+                  - field: name
+                    rule: required
+    RequestTooLarge:
+      description: The request body exceeds the configured size limit.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: request_too_large
+              message: The request body is too large.
+    UnsupportedMediaType:
+      description: The request body is not JSON.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: unsupported_media_type
+              message: Content-Type must be application/json.
     NotFound:
       description: The resource was not found.
       content:

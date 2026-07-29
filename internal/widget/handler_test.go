@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
 )
 
 func TestHandlerCreate(t *testing.T) {
@@ -46,6 +48,13 @@ func TestHandlerCreate(t *testing.T) {
 			wantBody:   `"code":"invalid_widget_name"`,
 		},
 		{
+			name:       "missing name",
+			body:       `{"name":""}`,
+			repository: &repositoryStub{},
+			wantStatus: http.StatusUnprocessableEntity,
+			wantBody:   `"fields":[{"field":"name","rule":"required"}]`,
+		},
+		{
 			name:       "repository failure",
 			body:       `{"name":"example"}`,
 			repository: &repositoryStub{createErr: errors.New("repository failure")},
@@ -63,6 +72,34 @@ func TestHandlerCreate(t *testing.T) {
 			assertResponse(t, response, test.wantStatus, test.wantBody)
 		})
 	}
+}
+
+func TestHandlerCreateRejectsNonJSONContentType(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.DiscardHandler)
+	handler := NewHandler(NewService(&repositoryStub{}), logger, httpkit.NewJSONDecoder(1<<20)).Router()
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"name":"example"}`))
+	request.Header.Set("Content-Type", "text/plain")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	assertResponse(t, response, http.StatusUnsupportedMediaType, `"code":"unsupported_media_type"`)
+}
+
+func TestHandlerCreateRejectsOversizedBody(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.DiscardHandler)
+	handler := NewHandler(NewService(&repositoryStub{}), logger, httpkit.NewJSONDecoder(4)).Router()
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"name":"example"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	assertResponse(t, response, http.StatusRequestEntityTooLarge, `"code":"request_too_large"`)
 }
 
 func TestHandlerGet(t *testing.T) {
@@ -254,8 +291,11 @@ func serveWidgetRequest(t *testing.T, repository *repositoryStub, method, target
 	t.Helper()
 
 	logger := slog.New(slog.DiscardHandler)
-	handler := NewHandler(NewService(repository), logger).Router()
+	handler := NewHandler(NewService(repository), logger, httpkit.NewJSONDecoder(1<<20)).Router()
 	request := httptest.NewRequestWithContext(context.Background(), method, target, strings.NewReader(body))
+	if body != "" {
+		request.Header.Set("Content-Type", "application/json")
+	}
 	response := httptest.NewRecorder()
 
 	handler.ServeHTTP(response, request)

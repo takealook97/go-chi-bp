@@ -17,6 +17,7 @@ func TestLoadRequiresDatabaseURL(t *testing.T) {
 func TestLoadValidConfiguration(t *testing.T) {
 	setValidEnvironment(t)
 	t.Setenv("HTTP_ADDR", ":9090")
+	t.Setenv("HTTP_CORS_ALLOWED_ORIGINS", "https://app.example.com, https://admin.example.com")
 	t.Setenv("DB_MAX_CONNS", "8")
 	t.Setenv("DB_MIN_CONNS", "1")
 
@@ -29,6 +30,9 @@ func TestLoadValidConfiguration(t *testing.T) {
 	}
 	if cfg.Database.MaxConnections != 8 {
 		t.Fatalf("max connections = %d, want 8", cfg.Database.MaxConnections)
+	}
+	if len(cfg.HTTP.CORS.AllowedOrigins) != 2 || cfg.HTTP.CORS.AllowedOrigins[1] != "https://admin.example.com" {
+		t.Fatalf("allowed origins = %v, want two trimmed origins", cfg.HTTP.CORS.AllowedOrigins)
 	}
 }
 
@@ -44,6 +48,9 @@ func TestLoadRejectsInvalidConfiguration(t *testing.T) {
 		{name: "invalid read timeout", key: "HTTP_READ_TIMEOUT", value: "0s", wantError: "HTTP_READ_TIMEOUT"},
 		{name: "invalid write timeout", key: "HTTP_WRITE_TIMEOUT", value: "-1s", wantError: "HTTP_WRITE_TIMEOUT"},
 		{name: "invalid idle timeout", key: "HTTP_IDLE_TIMEOUT", value: "invalid", wantError: "HTTP_IDLE_TIMEOUT"},
+		{name: "invalid maximum request bytes", key: "HTTP_MAX_REQUEST_BYTES", value: "0", wantError: "HTTP_MAX_REQUEST_BYTES"},
+		{name: "invalid CORS credentials", key: "HTTP_CORS_ALLOW_CREDENTIALS", value: "sometimes", wantError: "HTTP_CORS_ALLOW_CREDENTIALS"},
+		{name: "invalid client IP mode", key: "HTTP_CLIENT_IP_MODE", value: "automatic", wantError: "HTTP_CLIENT_IP_MODE"},
 		{name: "invalid maximum connections", key: "DB_MAX_CONNS", value: "0", wantError: "DB_MAX_CONNS"},
 		{name: "invalid minimum connections", key: "DB_MIN_CONNS", value: "-1", wantError: "DB_MIN_CONNS"},
 		{name: "minimum exceeds maximum", key: "DB_MIN_CONNS", value: "11", wantError: "must not exceed"},
@@ -55,6 +62,45 @@ func TestLoadRejectsInvalidConfiguration(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			setValidEnvironment(t)
+			t.Setenv(test.key, test.value)
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), test.wantError) {
+				t.Fatalf("Load() error = %v, want error containing %q", err, test.wantError)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsCredentialedWildcardCORS(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("HTTP_CORS_ALLOWED_ORIGINS", "*")
+	t.Setenv("HTTP_CORS_ALLOW_CREDENTIALS", "true")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "must not contain *") {
+		t.Fatalf("Load() error = %v, want credentialed wildcard rejection", err)
+	}
+}
+
+func TestLoadValidatesTrustedProxyConfiguration(t *testing.T) {
+	tests := []struct {
+		name      string
+		mode      string
+		key       string
+		value     string
+		wantError string
+	}{
+		{name: "empty trusted header", mode: "header", key: "HTTP_CLIENT_IP_HEADER", value: "", wantError: "HTTP_CLIENT_IP_HEADER"},
+		{name: "empty trusted CIDRs", mode: "xff-cidrs", key: "HTTP_TRUSTED_PROXY_CIDRS", value: "", wantError: "HTTP_TRUSTED_PROXY_CIDRS"},
+		{name: "invalid trusted CIDR", mode: "xff-cidrs", key: "HTTP_TRUSTED_PROXY_CIDRS", value: "not-a-cidr", wantError: "invalid prefix"},
+		{name: "invalid trusted proxy count", mode: "xff-count", key: "HTTP_TRUSTED_PROXY_COUNT", value: "0", wantError: "HTTP_TRUSTED_PROXY_COUNT"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setValidEnvironment(t)
+			t.Setenv("HTTP_CLIENT_IP_MODE", test.mode)
 			t.Setenv(test.key, test.value)
 
 			_, err := Load()
@@ -84,17 +130,24 @@ func setValidEnvironment(t *testing.T) {
 	t.Helper()
 
 	for key, value := range map[string]string{
-		"DATABASE_URL":             "postgres://example.invalid/app",
-		"HTTP_ADDR":                ":8080",
-		"HTTP_READ_HEADER_TIMEOUT": "5s",
-		"HTTP_READ_TIMEOUT":        "15s",
-		"HTTP_WRITE_TIMEOUT":       "30s",
-		"HTTP_IDLE_TIMEOUT":        "60s",
-		"DB_MAX_CONNS":             "10",
-		"DB_MIN_CONNS":             "2",
-		"DB_MAX_CONN_LIFETIME":     "30m",
-		"DB_MAX_CONN_IDLE_TIME":    "5m",
-		"SHUTDOWN_TIMEOUT":         "10s",
+		"DATABASE_URL":                "postgres://example.invalid/app",
+		"HTTP_ADDR":                   ":8080",
+		"HTTP_READ_HEADER_TIMEOUT":    "5s",
+		"HTTP_READ_TIMEOUT":           "15s",
+		"HTTP_WRITE_TIMEOUT":          "30s",
+		"HTTP_IDLE_TIMEOUT":           "60s",
+		"HTTP_MAX_REQUEST_BYTES":      "1048576",
+		"HTTP_CORS_ALLOWED_ORIGINS":   "",
+		"HTTP_CORS_ALLOW_CREDENTIALS": "false",
+		"HTTP_CLIENT_IP_MODE":         "remote",
+		"HTTP_CLIENT_IP_HEADER":       "X-Real-IP",
+		"HTTP_TRUSTED_PROXY_CIDRS":    "",
+		"HTTP_TRUSTED_PROXY_COUNT":    "1",
+		"DB_MAX_CONNS":                "10",
+		"DB_MIN_CONNS":                "2",
+		"DB_MAX_CONN_LIFETIME":        "30m",
+		"DB_MAX_CONN_IDLE_TIME":       "5m",
+		"SHUTDOWN_TIMEOUT":            "10s",
 	} {
 		t.Setenv(key, value)
 	}

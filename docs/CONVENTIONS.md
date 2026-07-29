@@ -35,10 +35,15 @@ that explains the concrete trade-off.
 - Use `/v1/...` for public application endpoints.
 - Use camelCase JSON fields and snake_case database identifiers.
 - Reject unknown JSON fields and limit request body sizes.
+- Require an explicit JSON media type for JSON request bodies.
+- Keep transport validation on OpenAPI-generated boundary types and business
+  validation in application services.
 - Return one JSON value per response and a consistent error envelope.
 - Do not expose internal error strings, SQL, stack traces, or vendor responses.
 - Set explicit server and outbound-client timeouts.
 - Pass the request context to every downstream operation.
+- Trust forwarded client IP values only through an explicitly configured proxy
+  topology.
 - Liveness checks test the process only. Readiness checks test required
   dependencies with strict timeouts.
 

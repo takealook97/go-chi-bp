@@ -6,13 +6,42 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"reflect"
+	"strings"
+
+	"github.com/go-playground/validator/v10"
 )
 
 const (
-	maxRequestBodyBytes = 1 << 20
-	internalErrorJSON   = "{\"error\":{\"code\":\"internal_error\",\"message\":\"An internal error occurred.\"}}\n"
+	internalErrorJSON = "{\"error\":{\"code\":\"internal_error\",\"message\":\"An internal error occurred.\"}}\n"
 )
+
+// ErrUnsupportedMediaType indicates that a JSON endpoint received another media type.
+var ErrUnsupportedMediaType = errors.New("request content type must be application/json")
+
+// JSONDecoder strictly decodes and validates JSON request bodies.
+type JSONDecoder struct {
+	maxRequestBytes int64
+	validator       *validator.Validate
+}
+
+// FieldViolation describes one client-safe request validation failure.
+type FieldViolation struct {
+	Field string `json:"field"`
+	Rule  string `json:"rule"`
+}
+
+// ValidationError contains stable field-level validation failures.
+type ValidationError struct {
+	Fields []FieldViolation
+}
+
+// Error implements error without exposing request values.
+func (validationError *ValidationError) Error() string {
+	return "request validation failed"
+}
 
 // ErrorResponse is the stable public error envelope.
 type ErrorResponse struct {
@@ -26,21 +55,66 @@ type APIError struct {
 	Details map[string]any `json:"details,omitempty"`
 }
 
-// DecodeJSON decodes exactly one JSON object using strict field matching.
-func DecodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+// NewJSONDecoder constructs a strict request decoder with a body-size limit.
+func NewJSONDecoder(maxRequestBytes int64) *JSONDecoder {
+	if maxRequestBytes < 1 {
+		panic("maximum request bytes must be at least 1")
+	}
 
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
+	validate := validator.New(validator.WithRequiredStructEnabled())
+	validate.RegisterTagNameFunc(func(field reflect.StructField) string {
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		if name == "" || name == "-" {
+			return field.Name
+		}
 
-	if err := decoder.Decode(destination); err != nil {
+		return name
+	})
+
+	return &JSONDecoder{maxRequestBytes: maxRequestBytes, validator: validate}
+}
+
+// Decode decodes exactly one JSON object and validates its transport constraints.
+func (decoder *JSONDecoder) Decode(w http.ResponseWriter, r *http.Request, destination any) error {
+	if !isJSONContentType(r.Header.Get("Content-Type")) {
+		return ErrUnsupportedMediaType
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, decoder.maxRequestBytes)
+
+	jsonDecoder := json.NewDecoder(r.Body)
+	jsonDecoder.DisallowUnknownFields()
+
+	if err := jsonDecoder.Decode(destination); err != nil {
 		return fmt.Errorf("decode JSON body: %w", err)
 	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+	if err := jsonDecoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return errors.New("request body must contain one JSON value")
+	}
+	if err := decoder.validator.Struct(destination); err != nil {
+		var validationErrors validator.ValidationErrors
+		if !errors.As(err, &validationErrors) {
+			return fmt.Errorf("validate JSON body: %w", err)
+		}
+
+		fields := make([]FieldViolation, 0, len(validationErrors))
+		for _, fieldError := range validationErrors {
+			fields = append(fields, FieldViolation{Field: fieldError.Field(), Rule: fieldError.Tag()})
+		}
+
+		return &ValidationError{Fields: fields}
 	}
 
 	return nil
+}
+
+func isJSONContentType(value string) bool {
+	mediaType, _, err := mime.ParseMediaType(value)
+	if err != nil {
+		return false
+	}
+
+	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
 }
 
 // WriteJSON writes a JSON response or a safe internal error when encoding fails.
@@ -75,10 +149,16 @@ func writeJSONBytes(w http.ResponseWriter, status int, body []byte) error {
 
 // WriteError writes the stable public error envelope.
 func WriteError(w http.ResponseWriter, status int, code, message string) {
+	WriteErrorDetails(w, status, code, message, nil)
+}
+
+// WriteErrorDetails writes the stable public error envelope with client-safe details.
+func WriteErrorDetails(w http.ResponseWriter, status int, code, message string, details map[string]any) {
 	_ = WriteJSON(w, status, ErrorResponse{
 		Error: APIError{
 			Code:    code,
 			Message: message,
+			Details: details,
 		},
 	})
 }

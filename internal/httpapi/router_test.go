@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
 	"github.com/lukuku-dev/go-chi-bp/internal/widget"
 )
 
@@ -35,7 +38,12 @@ func TestLiveness(t *testing.T) {
 
 	logger := slog.New(slog.DiscardHandler)
 	service := widget.NewService(emptyWidgetRepository{})
-	router := NewRouter(logger, func(context.Context) error { return nil }, widget.NewHandler(service, logger))
+	router := NewRouter(
+		logger,
+		func(context.Context) error { return nil },
+		widget.NewHandler(service, logger, httpkit.NewJSONDecoder(1<<20)),
+		Options{},
+	)
 	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/live", nil)
 	response := httptest.NewRecorder()
 
@@ -80,9 +88,65 @@ func TestUnknownRouteUsesErrorEnvelope(t *testing.T) {
 	}
 }
 
+func TestCORSAllowsConfiguredOrigin(t *testing.T) {
+	t.Parallel()
+
+	router := testRouterWithOptions(
+		func(context.Context) error { return nil },
+		Options{CORS: CORSOptions{AllowedOrigins: []string{"https://app.example.com"}}},
+	)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodOptions, "/v1/widgets", nil)
+	request.Header.Set("Origin", "https://app.example.com")
+	request.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.com" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want configured origin", got)
+	}
+	if got := response.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+}
+
+func TestClientIPUsesOnlyConfiguredTrustedHeader(t *testing.T) {
+	t.Parallel()
+
+	var clientIP string
+	handler := clientIPMiddleware(ClientIPOptions{
+		Mode:          "header",
+		TrustedHeader: "CF-Connecting-IP",
+	})(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		clientIP = middleware.GetClientIP(request.Context())
+	}))
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	request.Header.Set("X-Forwarded-For", "198.51.100.1")
+	request.Header.Set("CF-Connecting-IP", "203.0.113.7")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if clientIP != "203.0.113.7" {
+		t.Fatalf("client IP = %q, want trusted header value", clientIP)
+	}
+}
+
 func testRouter(check ReadinessCheck) http.Handler {
+	return testRouterWithOptions(check, Options{})
+}
+
+func testRouterWithOptions(check ReadinessCheck, options Options) http.Handler {
 	logger := slog.New(slog.DiscardHandler)
 	service := widget.NewService(emptyWidgetRepository{})
 
-	return NewRouter(logger, check, widget.NewHandler(service, logger))
+	return NewRouter(
+		logger,
+		check,
+		widget.NewHandler(service, logger, httpkit.NewJSONDecoder(1<<20)),
+		options,
+	)
 }

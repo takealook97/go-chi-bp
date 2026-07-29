@@ -29,6 +29,7 @@ func logRequest(logger *slog.Logger) func(http.Handler) http.Handler {
 					ctx,
 					"HTTP request completed",
 					"requestID", middleware.GetReqID(ctx),
+					"clientIP", middleware.GetClientIP(ctx),
 					"method", r.Method,
 					"path", r.URL.Path,
 					"status", status,

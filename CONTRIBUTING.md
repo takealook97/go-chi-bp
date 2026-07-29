@@ -3,7 +3,7 @@
 1. Read `docs/ARCHITECTURE.md` and `docs/CONVENTIONS.md`.
 2. Update the OpenAPI contract for public API changes.
 3. Add or update tests with the behavior change.
-4. Regenerate sqlc output when schema or queries change.
+4. Regenerate OpenAPI and sqlc output when their source contracts change.
 5. Run `make check`.
 
 Database behavior changes should also run `make test-integration` against a
