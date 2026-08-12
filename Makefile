@@ -1,5 +1,7 @@
 SHELL := /bin/sh
 
+include tools.mk
+
 ifneq (,$(wildcard .env))
 include .env
 export
@@ -17,12 +19,6 @@ GOVULNCHECK := $(BIN_DIR)/govulncheck
 OAPI_CODEGEN := $(BIN_DIR)/oapi-codegen
 CHECK_TOOLS := $(SQLC) $(GOLANGCI_LINT) $(VACUUM) $(GOVULNCHECK) $(OAPI_CODEGEN)
 
-SQLC_VERSION := v1.31.1
-GOOSE_VERSION := v3.27.2
-GOLANGCI_LINT_VERSION := v2.12.2
-VACUUM_VERSION := v0.29.9
-GOVULNCHECK_VERSION := v1.6.0
-OAPI_CODEGEN_VERSION := v2.8.0
 COVERAGE_MIN := 80.0
 MAINTAINED_PACKAGES = $(shell go list ./internal/... | grep -Ev '/(apigen|dbgen|testkit)(/|$$)')
 
@@ -42,22 +38,22 @@ $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
 
 $(SQLC): | $(BIN_DIR)
-	GOBIN=$(BIN_DIR) go install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+	GOBIN=$(BIN_DIR) go install $(SQLC_INSTALL)
 
 $(GOOSE): | $(BIN_DIR)
-	GOBIN=$(BIN_DIR) go install github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION)
+	GOBIN=$(BIN_DIR) go install $(GOOSE_INSTALL)
 
 $(GOLANGCI_LINT): | $(BIN_DIR)
-	GOBIN=$(BIN_DIR) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	GOBIN=$(BIN_DIR) go install $(GOLANGCI_LINT_INSTALL)
 
 $(VACUUM): | $(BIN_DIR)
-	GOBIN=$(BIN_DIR) go install github.com/daveshanley/vacuum@$(VACUUM_VERSION)
+	GOBIN=$(BIN_DIR) go install $(VACUUM_INSTALL)
 
 $(GOVULNCHECK): | $(BIN_DIR)
-	GOBIN=$(BIN_DIR) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	GOBIN=$(BIN_DIR) go install $(GOVULNCHECK_INSTALL)
 
 $(OAPI_CODEGEN): | $(BIN_DIR)
-	GOBIN=$(BIN_DIR) go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
+	GOBIN=$(BIN_DIR) go install $(OAPI_CODEGEN_INSTALL)
 
 hooks: ## Enable repository-managed Git hooks.
 	git config core.hooksPath .githooks

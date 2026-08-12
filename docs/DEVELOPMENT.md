@@ -18,6 +18,10 @@ The application reads `.env` only through the Makefile. The binary itself reads
 the process environment and therefore behaves the same in containers and
 production.
 
+Development tool versions are pinned in `tools.mk`. Keeping that manifest
+separate ensures CI reuses compiled tool binaries when application build targets
+change, while still invalidating the cache whenever a tool version changes.
+
 If port `5432` is already in use, change both `POSTGRES_PORT` and the port in
 `DATABASE_URL` in `.env` before starting PostgreSQL.
 
