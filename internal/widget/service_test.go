@@ -163,8 +163,8 @@ func TestServiceListAppliesDefaultLimit(t *testing.T) {
 	if _, err := service.List(context.Background(), ListOptions{}); err != nil {
 		t.Fatalf("List() unexpected error: %v", err)
 	}
-	if repository.listOptions.Limit != defaultListLimit+1 {
-		t.Fatalf("repository limit = %d, want %d", repository.listOptions.Limit, defaultListLimit+1)
+	if repository.listOptions.Limit != DefaultListLimit+1 {
+		t.Fatalf("repository limit = %d, want %d", repository.listOptions.Limit, DefaultListLimit+1)
 	}
 }
 

@@ -24,7 +24,7 @@ If port `5432` is already in use, change both `POSTGRES_PORT` and the port in
 ## Database workflow
 
 1. Add a forward and backward Goose migration under `db/migrations`.
-2. Update SQL in `db/queries`.
+2. Update capability-owned SQL in `db/queries/<capability>`.
 3. Run `make sqlc`.
 4. Add repository and service tests.
 5. Run `make check`.
@@ -44,15 +44,19 @@ at the HTTP boundary and must not become domain or database models.
 
 ## Testing
 
-The default test command runs unit tests without requiring external services:
+The default test command runs deterministic unit and in-process HTTP tests. It
+never enables integration build tags or requires external services:
 
 ```sh
 make test
 ```
 
-Repository integration tests require an isolated PostgreSQL database. They
-create a random schema, apply the real Goose migration, execute the generated
-sqlc queries, roll the migration back, and remove the schema.
+Repository integration tests use the `integration` build tag and require an
+isolated PostgreSQL database. The shared `internal/testkit/postgrestest` harness
+creates a random schema, applies migrations through the real Goose provider,
+executes generated sqlc queries, rolls migrations back, and removes the schema.
+Goose is the only added test-harness dependency because reimplementing its SQL
+migration grammar would make the test behave differently from deployments.
 
 ```sh
 make db-up
@@ -65,7 +69,9 @@ provides PostgreSQL and sets `TEST_DATABASE_URL`, so `make check` exercises the
 integration path there. Without that variable, the integration test skips and
 the remaining local checks still run.
 
-`make check` remains the merge gate. It verifies formatting, generated sqlc and
+`make check` remains the merge gate. When `TEST_DATABASE_URL` is set it invokes
+`make test-integration` in addition to the external-service-free test suite. It
+verifies formatting, generated sqlc and
 OpenAPI output, tidy module files, OpenAPI quality, vet and lint findings, reachable
 dependency vulnerabilities, race-tested behavior, and the production binary
 build. CI additionally builds the production container image. The check prints
@@ -76,7 +82,7 @@ Generate a browsable local coverage report with `make cover`. The command writes
 `coverage.out` and `coverage.html`; both files are ignored and removed by
 `make clean`. The merge gate runs `make cover-check` and requires at least 80%
 statement coverage across maintained internal packages. Generated sqlc code and
-the composition root are excluded from that aggregate.
+test harness packages are excluded from that aggregate.
 
 The HTTP test suite also compares every OpenAPI path and method with the routes
 registered by Chi. This catches undocumented endpoints and documented endpoints
@@ -88,17 +94,20 @@ verifying response status codes and payload behavior.
 Create `internal/<capability>` as a vertical slice. A typical module contains:
 
 ```text
-internal/orders/
-  dbgen/         Generated database access code, when required
-  model.go       Domain and application data
-  service.go     Use cases and consumed interfaces
-  repository.go  PostgreSQL adapter, when required
-  handler.go     HTTP transport adapter
+internal/order/
+  model.go          Domain and application data
+  service.go        Use cases and consumed interfaces
+  orderhttp/        HTTP transport adapter
+  orderpostgres/    PostgreSQL adapter
+    dbgen/           Generated database access code
   *_test.go
+
+db/queries/order/   SQL owned by the order capability
 ```
 
-Small modules should stay small. Do not create empty `domain`, `usecase`,
-`ports`, and `adapters` directories to imitate an architecture diagram.
+Small modules should stay small. Create child adapter packages only when they
+contain real adapter code; do not create empty `domain`, `usecase`, `ports`, and
+`adapters` directories to imitate an architecture diagram.
 
 The depguard rules in `.golangci.yml` mechanically keep router, database,
 generated SQL, and environment packages out of business model and service

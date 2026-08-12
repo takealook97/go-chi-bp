@@ -7,14 +7,21 @@ separate service only when independent deployment, scaling, ownership, security,
 or availability requirements justify the operational cost.
 
 ```text
-cmd/api                 Composition root
+cmd/api                 Process entry point and signal handling
+internal/app            Composition root and application lifecycle
 internal/httpapi        HTTP router and cross-cutting HTTP behavior
 internal/httpapi/apigen Generated public-contract boundary types
 internal/platform       Technical adapters shared by modules
-internal/<capability>         Vertical business module
-internal/<capability>/dbgen   Module-owned generated database access code
+internal/<capability>    Transport- and persistence-independent use cases
+internal/<capability>/<capability>http
+                        Capability-owned HTTP adapter
+internal/<capability>/<capability>postgres
+                        Capability-owned PostgreSQL adapter
+internal/<capability>/<capability>postgres/dbgen
+                        Module-owned generated database access code
+internal/testkit         Reusable integration-test harnesses
 db/migrations           Versioned database schema changes
-db/queries              SQL consumed by sqlc
+db/queries/<capability> SQL owned by one capability and consumed by sqlc
 api                     Public OpenAPI contract
 ```
 
@@ -30,6 +37,11 @@ HTTP handler -> application service -> repository interface
 The composition root constructs concrete adapters and injects them inward.
 Business services must not import Chi, pgx, sqlc-generated packages, environment
 packages, or another module's HTTP handler.
+
+Go packages are architecture boundaries. HTTP and PostgreSQL adapters live in
+child packages rather than beside business services in the same package. This
+keeps dependency direction compiler-enforceable and lets an adapter be replaced
+without coupling business behavior to its dependencies.
 
 ## Module rules
 
@@ -65,6 +77,12 @@ Transactions start at the application use-case boundary, not inside HTTP
 handlers. A repository method must not commit a transaction that its caller
 expects to coordinate with other writes.
 
+When a use case spans multiple repositories, define a capability-owned
+transaction port that exposes only that capability's repositories. Implement it
+in the PostgreSQL adapter with pgx. Do not pass pgx transactions through business
+types, hide transactions in context values, or add a domain-agnostic service
+locator.
+
 Keep transactions short and never hold them open while calling an external
 service.
 
@@ -74,6 +92,17 @@ service.
 do not define it. Generated OpenAPI types remain at the HTTP boundary and are
 mapped explicitly to application models. Breaking changes require a new API
 version or a documented migration path.
+
+## Application and test harnesses
+
+`internal/app` assembles replaceable capability ports into one in-process HTTP
+application. `cmd/api` owns only process concerns. Tests can build the same
+application with fakes without environment variables, sockets, or PostgreSQL.
+
+`internal/testkit` contains reusable infrastructure test harnesses. The
+PostgreSQL harness creates an isolated schema, applies migrations through Goose,
+and cleans up through `testing.T.Cleanup`. Production code must never import a
+test harness package.
 
 ## Extraction criteria
 

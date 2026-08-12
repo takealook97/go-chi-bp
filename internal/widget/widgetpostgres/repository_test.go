@@ -1,10 +1,10 @@
-package widget
+package widgetpostgres
 
 import (
 	"testing"
 	"time"
 
-	dbgen "github.com/lukuku-dev/go-chi-bp/internal/widget/dbgen"
+	dbgen "github.com/lukuku-dev/go-chi-bp/internal/widget/widgetpostgres/dbgen"
 )
 
 func TestWidgetFromDatabaseNormalizesTimestampsToUTC(t *testing.T) {

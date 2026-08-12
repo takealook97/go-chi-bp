@@ -26,7 +26,13 @@ func New(cfg config.HTTP, handler http.Handler, logger *slog.Logger) *http.Serve
 }
 
 // Run serves requests until the context is canceled, then shuts down cleanly.
-func Run(ctx context.Context, server *http.Server, shutdownTimeout time.Duration, logger *slog.Logger) error {
+func Run(
+	ctx context.Context,
+	server *http.Server,
+	shutdownTimeout time.Duration,
+	beforeShutdown func(),
+	logger *slog.Logger,
+) error {
 	errChannel := make(chan error, 1)
 	go func() {
 		logger.Info("HTTP server started", "address", server.Addr)
@@ -39,6 +45,9 @@ func Run(ctx context.Context, server *http.Server, shutdownTimeout time.Duration
 			return fmt.Errorf("serve HTTP: %w", err)
 		}
 	case <-ctx.Done():
+		if beforeShutdown != nil {
+			beforeShutdown()
+		}
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)

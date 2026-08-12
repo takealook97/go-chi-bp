@@ -66,7 +66,7 @@ curl -X POST http://localhost:8080/v1/widgets \
 ```sh
 make run             # Run the API
 make build           # Build the binary
-make test            # Run tests
+make test            # Run external-service-free tests
 make test-race       # Run tests with the race detector
 make test-integration # Run PostgreSQL integration tests
 make cover           # Generate coverage.out and coverage.html
@@ -126,3 +126,8 @@ This template is available under the [MIT License](LICENSE).
 The modular monolith is the production default. The microservice guide describes
 how to extract a proven capability without introducing distributed infrastructure
 or shared data ownership prematurely.
+
+The `internal/app` composition harness can assemble the API with production
+adapters or test doubles. Capability cores remain independent of Chi, pgx, and
+generated code; concrete HTTP and PostgreSQL adapters live in capability-owned
+child packages so future extraction changes adapters rather than business rules.

@@ -1,4 +1,4 @@
-package widget
+package widgethttp
 
 import (
 	"context"
@@ -12,7 +12,34 @@ import (
 	"time"
 
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
+	"github.com/lukuku-dev/go-chi-bp/internal/widget"
 )
+
+type repositoryStub struct {
+	create    widget.Widget
+	createErr error
+	get       widget.Widget
+	getErr    error
+	list      []widget.Widget
+	listErr   error
+	deleteErr error
+}
+
+func (stub *repositoryStub) Create(context.Context, string) (widget.Widget, error) {
+	return stub.create, stub.createErr
+}
+
+func (stub *repositoryStub) Get(context.Context, int64) (widget.Widget, error) {
+	return stub.get, stub.getErr
+}
+
+func (stub *repositoryStub) List(context.Context, widget.ListOptions) ([]widget.Widget, error) {
+	return stub.list, stub.listErr
+}
+
+func (stub *repositoryStub) Delete(context.Context, int64) error {
+	return stub.deleteErr
+}
 
 func TestHandlerCreate(t *testing.T) {
 	t.Parallel()
@@ -27,7 +54,7 @@ func TestHandlerCreate(t *testing.T) {
 		{
 			name: "created",
 			body: `{"name":"example"}`,
-			repository: &repositoryStub{create: Widget{
+			repository: &repositoryStub{create: widget.Widget{
 				ID: 1, Name: "example", CreatedAt: time.Unix(1, 0).UTC(), UpdatedAt: time.Unix(1, 0).UTC(),
 			}},
 			wantStatus: http.StatusCreated,
@@ -78,7 +105,7 @@ func TestHandlerCreateRejectsNonJSONContentType(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	handler := NewHandler(NewService(&repositoryStub{}), logger, httpkit.NewJSONDecoder(1<<20)).Router()
+	handler := NewHandler(widget.NewService(&repositoryStub{}), logger, httpkit.NewJSONDecoder(1<<20)).Router()
 	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"name":"example"}`))
 	request.Header.Set("Content-Type", "text/plain")
 	response := httptest.NewRecorder()
@@ -92,7 +119,7 @@ func TestHandlerCreateRejectsOversizedBody(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	handler := NewHandler(NewService(&repositoryStub{}), logger, httpkit.NewJSONDecoder(4)).Router()
+	handler := NewHandler(widget.NewService(&repositoryStub{}), logger, httpkit.NewJSONDecoder(4)).Router()
 	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"name":"example"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -116,7 +143,7 @@ func TestHandlerGet(t *testing.T) {
 		{
 			name:       "found",
 			target:     "/7",
-			repository: &repositoryStub{get: Widget{ID: 7, Name: "example", CreatedAt: createdAt, UpdatedAt: createdAt}},
+			repository: &repositoryStub{get: widget.Widget{ID: 7, Name: "example", CreatedAt: createdAt, UpdatedAt: createdAt}},
 			wantStatus: http.StatusOK,
 			wantBody:   `"id":7`,
 		},
@@ -130,7 +157,7 @@ func TestHandlerGet(t *testing.T) {
 		{
 			name:       "not found",
 			target:     "/7",
-			repository: &repositoryStub{getErr: ErrNotFound},
+			repository: &repositoryStub{getErr: widget.ErrNotFound},
 			wantStatus: http.StatusNotFound,
 			wantBody:   `"code":"widget_not_found"`,
 		},
@@ -167,14 +194,14 @@ func TestHandlerList(t *testing.T) {
 		{
 			name:       "bounded page",
 			target:     "/?limit=10",
-			repository: &repositoryStub{list: []Widget{}},
+			repository: &repositoryStub{list: []widget.Widget{}},
 			wantStatus: http.StatusOK,
 			wantBody:   `"items":[],"limit":10,"nextCursor":null`,
 		},
 		{
 			name:   "continuation cursor",
 			target: "/?limit=1",
-			repository: &repositoryStub{list: []Widget{
+			repository: &repositoryStub{list: []widget.Widget{
 				{ID: 2, CreatedAt: time.Unix(2, 0).UTC()},
 				{ID: 1, CreatedAt: time.Unix(1, 0).UTC()},
 			}},
@@ -237,7 +264,7 @@ func TestHandlerDelete(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		t.Parallel()
 
-		response := serveWidgetRequest(t, &repositoryStub{deleteErr: ErrNotFound}, http.MethodDelete, "/7", "")
+		response := serveWidgetRequest(t, &repositoryStub{deleteErr: widget.ErrNotFound}, http.MethodDelete, "/7", "")
 
 		assertResponse(t, response, http.StatusNotFound, `"code":"widget_not_found"`)
 	})
@@ -262,7 +289,7 @@ func TestHandlerDelete(t *testing.T) {
 func TestListCursorRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	want := ListCursor{CreatedAt: time.Unix(1, 123456000).UTC(), ID: 7}
+	want := widget.ListCursor{CreatedAt: time.Unix(1, 123456000).UTC(), ID: 7}
 	result, err := decodeListCursor(encodeListCursor(want))
 	if err != nil {
 		t.Fatalf("decodeListCursor() unexpected error: %v", err)
@@ -291,7 +318,7 @@ func serveWidgetRequest(t *testing.T, repository *repositoryStub, method, target
 	t.Helper()
 
 	logger := slog.New(slog.DiscardHandler)
-	handler := NewHandler(NewService(repository), logger, httpkit.NewJSONDecoder(1<<20)).Router()
+	handler := NewHandler(widget.NewService(repository), logger, httpkit.NewJSONDecoder(1<<20)).Router()
 	request := httptest.NewRequestWithContext(context.Background(), method, target, strings.NewReader(body))
 	if body != "" {
 		request.Header.Set("Content-Type", "application/json")

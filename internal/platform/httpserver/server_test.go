@@ -43,8 +43,12 @@ func TestRunStopsCleanlyWhenContextIsCanceled(t *testing.T) {
 	cancel()
 	server := testServer("127.0.0.1:0")
 
-	if err := Run(ctx, server, time.Second, slog.New(slog.DiscardHandler)); err != nil {
+	drained := false
+	if err := Run(ctx, server, time.Second, func() { drained = true }, slog.New(slog.DiscardHandler)); err != nil {
 		t.Fatalf("Run() unexpected error: %v", err)
+	}
+	if !drained {
+		t.Fatal("Run() did not begin draining before shutdown")
 	}
 }
 
@@ -61,7 +65,7 @@ func TestRunReportsListenFailure(t *testing.T) {
 		}
 	}()
 
-	err = Run(context.Background(), testServer(listener.Addr().String()), time.Second, slog.New(slog.DiscardHandler))
+	err = Run(context.Background(), testServer(listener.Addr().String()), time.Second, nil, slog.New(slog.DiscardHandler))
 	if err == nil || !strings.Contains(err.Error(), "serve HTTP") {
 		t.Fatalf("Run() error = %v, want listen failure", err)
 	}

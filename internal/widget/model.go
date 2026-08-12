@@ -1,3 +1,4 @@
+// Package widget contains transport- and persistence-independent widget use cases.
 package widget
 
 import "time"

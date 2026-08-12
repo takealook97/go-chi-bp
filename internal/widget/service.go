@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	defaultListLimit  = 20
+	// DefaultListLimit is the transport-independent default page size.
+	DefaultListLimit  = 20
 	maximumListLimit  = 100
 	maximumNameLength = 120
 )
@@ -76,7 +77,7 @@ func (service *Service) Get(ctx context.Context, id int64) (Widget, error) {
 // List returns a bounded page of widgets.
 func (service *Service) List(ctx context.Context, options ListOptions) (Page, error) {
 	if options.Limit == 0 {
-		options.Limit = defaultListLimit
+		options.Limit = DefaultListLimit
 	}
 	if options.Limit < 1 || options.Limit > maximumListLimit ||
 		(options.Cursor != nil && (options.Cursor.ID < 1 || options.Cursor.CreatedAt.IsZero())) {

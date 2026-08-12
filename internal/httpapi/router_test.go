@@ -13,6 +13,7 @@ import (
 
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
 	"github.com/lukuku-dev/go-chi-bp/internal/widget"
+	"github.com/lukuku-dev/go-chi-bp/internal/widget/widgethttp"
 )
 
 type emptyWidgetRepository struct{}
@@ -40,8 +41,8 @@ func TestLiveness(t *testing.T) {
 	service := widget.NewService(emptyWidgetRepository{})
 	router := NewRouter(
 		logger,
-		func(context.Context) error { return nil },
-		widget.NewHandler(service, logger, httpkit.NewJSONDecoder(1<<20)),
+		[]ReadinessCheck{func(context.Context) error { return nil }},
+		[]RouteMount{{Pattern: "/v1/widgets", Handler: widgethttp.NewHandler(service, logger, httpkit.NewJSONDecoder(1<<20)).Router()}},
 		Options{},
 	)
 	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/live", nil)
@@ -145,8 +146,8 @@ func testRouterWithOptions(check ReadinessCheck, options Options) http.Handler {
 
 	return NewRouter(
 		logger,
-		check,
-		widget.NewHandler(service, logger, httpkit.NewJSONDecoder(1<<20)),
+		[]ReadinessCheck{check},
+		[]RouteMount{{Pattern: "/v1/widgets", Handler: widgethttp.NewHandler(service, logger, httpkit.NewJSONDecoder(1<<20)).Router()}},
 		options,
 	)
 }

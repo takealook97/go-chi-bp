@@ -1,7 +1,8 @@
-// Package widget demonstrates a vertical business module.
-package widget
+// Package widgethttp exposes widget use cases through HTTP.
+package widgethttp
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -15,17 +16,26 @@ import (
 
 	"github.com/lukuku-dev/go-chi-bp/internal/httpapi/apigen"
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
+	"github.com/lukuku-dev/go-chi-bp/internal/widget"
 )
+
+// Service describes the widget use cases consumed by the HTTP adapter.
+type Service interface {
+	Create(ctx context.Context, name string) (widget.Widget, error)
+	Get(ctx context.Context, id int64) (widget.Widget, error)
+	List(ctx context.Context, options widget.ListOptions) (widget.Page, error)
+	Delete(ctx context.Context, id int64) error
+}
 
 // Handler exposes widget use cases over HTTP.
 type Handler struct {
-	service *Service
+	service Service
 	logger  *slog.Logger
 	decoder *httpkit.JSONDecoder
 }
 
 // NewHandler constructs a widget HTTP handler.
-func NewHandler(service *Service, logger *slog.Logger, decoder *httpkit.JSONDecoder) *Handler {
+func NewHandler(service Service, logger *slog.Logger, decoder *httpkit.JSONDecoder) *Handler {
 	if service == nil || logger == nil || decoder == nil {
 		panic("widget handler dependencies must not be nil")
 	}
@@ -72,7 +82,7 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := handler.service.Create(r.Context(), request.Name)
-	if errors.Is(err, ErrInvalidName) {
+	if errors.Is(err, widget.ErrInvalidName) {
 		httpkit.WriteError(w, http.StatusUnprocessableEntity, "invalid_widget_name", "Name must contain 1 to 120 characters.")
 
 		return
@@ -95,7 +105,7 @@ func (handler *Handler) get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := handler.service.Get(r.Context(), id)
-	if errors.Is(err, ErrNotFound) {
+	if errors.Is(err, widget.ErrNotFound) {
 		httpkit.WriteError(w, http.StatusNotFound, "widget_not_found", "Widget was not found.")
 
 		return
@@ -110,7 +120,7 @@ func (handler *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
-	limit, err := queryInt32(r, "limit", defaultListLimit)
+	limit, err := queryInt32(r, "limit", widget.DefaultListLimit)
 	if err != nil {
 		httpkit.WriteError(w, http.StatusBadRequest, "invalid_pagination", "Pagination parameters are invalid.")
 
@@ -123,8 +133,8 @@ func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page, err := handler.service.List(r.Context(), ListOptions{Limit: limit, Cursor: cursor})
-	if errors.Is(err, ErrInvalidPagination) {
+	page, err := handler.service.List(r.Context(), widget.ListOptions{Limit: limit, Cursor: cursor})
+	if errors.Is(err, widget.ErrInvalidPagination) {
 		httpkit.WriteError(w, http.StatusBadRequest, "invalid_pagination", "Pagination parameters are invalid.")
 
 		return
@@ -157,7 +167,7 @@ func (handler *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := handler.service.Delete(r.Context(), id); errors.Is(err, ErrNotFound) {
+	if err := handler.service.Delete(r.Context(), id); errors.Is(err, widget.ErrNotFound) {
 		httpkit.WriteError(w, http.StatusNotFound, "widget_not_found", "Widget was not found.")
 
 		return
@@ -196,13 +206,13 @@ func queryInt32(r *http.Request, key string, fallback int32) (int32, error) {
 	return int32(parsed), err
 }
 
-func encodeListCursor(cursor ListCursor) string {
+func encodeListCursor(cursor widget.ListCursor) string {
 	payload := cursor.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + strconv.FormatInt(cursor.ID, 10)
 
 	return base64.RawURLEncoding.EncodeToString([]byte(payload))
 }
 
-func decodeListCursor(value string) (*ListCursor, error) {
+func decodeListCursor(value string) (*widget.ListCursor, error) {
 	if value == "" {
 		return nil, nil
 	}
@@ -225,10 +235,10 @@ func decodeListCursor(value string) (*ListCursor, error) {
 		return nil, errors.New("cursor identifier is invalid")
 	}
 
-	return &ListCursor{CreatedAt: createdAt.UTC(), ID: id}, nil
+	return &widget.ListCursor{CreatedAt: createdAt.UTC(), ID: id}, nil
 }
 
-func widgetToResponse(value Widget) apigen.Widget {
+func widgetToResponse(value widget.Widget) apigen.Widget {
 	return apigen.Widget{
 		ID:        value.ID,
 		Name:      value.Name,

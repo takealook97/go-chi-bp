@@ -2,11 +2,11 @@ version: "2"
 sql:
   - engine: postgresql
     schema: db/migrations
-    queries: db/queries
+    queries: db/queries/widget
     gen:
       go:
         package: dbgen
-        out: internal/widget/dbgen
+        out: internal/widget/widgetpostgres/dbgen
         sql_package: pgx/v5
         emit_empty_slices: true
         emit_exact_table_names: false

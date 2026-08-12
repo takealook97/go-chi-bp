@@ -1,4 +1,5 @@
 -- +goose Up
+-- +goose StatementBegin
 CREATE FUNCTION set_widgets_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -8,6 +9,7 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+-- +goose StatementEnd
 
 CREATE TRIGGER widgets_set_updated_at
 BEFORE UPDATE ON widgets

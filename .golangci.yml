@@ -25,18 +25,44 @@ linters:
           list-mode: lax
           files:
             - "**/internal/widget/*.go"
-            - "!**/internal/widget/handler.go"
-            - "!**/internal/widget/repository.go"
             - "!$test"
           deny:
             - pkg: github.com/go-chi/chi/v5
               desc: business code must not depend on the HTTP router
             - pkg: github.com/jackc/pgx/v5
               desc: business code must not depend on the PostgreSQL driver
-            - pkg: github.com/lukuku-dev/go-chi-bp/internal/widget/dbgen
+            - pkg: github.com/lukuku-dev/go-chi-bp/internal/widget/widgetpostgres/dbgen
               desc: generated database code must stay behind repositories
             - pkg: github.com/lukuku-dev/go-chi-bp/internal/platform/config
               desc: business code must receive validated values through constructors
+        http-adapter:
+          list-mode: lax
+          files:
+            - "**/internal/widget/widgethttp/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/jackc/pgx/v5
+              desc: HTTP adapters must not depend on the PostgreSQL driver
+            - pkg: github.com/lukuku-dev/go-chi-bp/internal/widget/widgetpostgres
+              desc: HTTP adapters must consume application services, not persistence adapters
+        postgres-adapter:
+          list-mode: lax
+          files:
+            - "**/internal/widget/widgetpostgres/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/go-chi/chi/v5
+              desc: PostgreSQL adapters must not depend on the HTTP router
+            - pkg: github.com/lukuku-dev/go-chi-bp/internal/httpapi
+              desc: PostgreSQL adapters must not depend on HTTP contracts
+        production-testkit:
+          list-mode: lax
+          files:
+            - "**/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/lukuku-dev/go-chi-bp/internal/testkit
+              desc: production code must not depend on test harnesses
   exclusions:
     generated: strict
 

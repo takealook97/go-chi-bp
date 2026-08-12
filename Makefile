@@ -24,10 +24,11 @@ VACUUM_VERSION := v0.29.9
 GOVULNCHECK_VERSION := v1.6.0
 OAPI_CODEGEN_VERSION := v2.8.0
 COVERAGE_MIN := 80.0
+MAINTAINED_PACKAGES = $(shell go list ./internal/... | grep -Ev '/(apigen|dbgen|testkit)(/|$$)')
 
 .DEFAULT_GOAL := help
 
-.PHONY: help tools check-tools hooks run build docker-build test test-race test-integration cover cover-check fmt fmt-check lint vet vuln \
+.PHONY: help tools check-tools hooks run build docker-build test test-race test-integration test-integration-check cover cover-check fmt fmt-check lint vet vuln \
 	tidy-check openapi openapi-check sqlc sqlc-check check clean db-up db-down migrate-up migrate-down migrate-status
 
 help: ## Show available commands.
@@ -71,18 +72,21 @@ build: ## Build the API binary.
 docker-build: ## Verify the production container image builds.
 	docker build --tag go-chi-bp:check .
 
-test: ## Run all unit tests.
-	go test ./...
+test: ## Run external-service-free tests.
+	go test -count=1 ./...
 
 test-race: ## Run all tests with the race detector.
 	go test -race ./...
 
 test-integration: ## Run PostgreSQL integration tests against TEST_DATABASE_URL.
 	@test -n "$(TEST_DATABASE_URL)" || { echo "TEST_DATABASE_URL is required"; exit 1; }
-	go test -race -count=1 -run Integration ./internal/platform/database ./internal/widget
+	go test -race -count=1 -tags=integration -run Integration ./internal/...
+
+test-integration-check: ## Run integration tests when PostgreSQL is configured.
+	@if test -n "$(TEST_DATABASE_URL)"; then $(MAKE) test-integration; else echo "NOTE: PostgreSQL integration tests were skipped because TEST_DATABASE_URL is not set."; fi
 
 cover: ## Generate an HTML coverage report for maintained application packages.
-	go test -coverprofile=coverage.out ./internal/httpapi ./internal/platform/... ./internal/widget
+	go test -coverprofile=coverage.out $(MAINTAINED_PACKAGES)
 	go tool cover -html=coverage.out -o coverage.html
 	@go tool cover -func=coverage.out | tail -n 1
 
@@ -124,10 +128,12 @@ sqlc-check: $(SQLC) ## Verify generated database code is current.
 		cp -R db "$$temp_dir/db"; \
 		cp sqlc.yaml "$$temp_dir/sqlc.yaml"; \
 		cd "$$temp_dir" && $(SQLC) generate; \
-		diff -ru "$$temp_dir/internal/widget/dbgen" "$(CURDIR)/internal/widget/dbgen"
+		temp_outputs="$$(cd "$$temp_dir" && find internal -type d -name dbgen | sort)"; \
+		repo_outputs="$$(find internal -type d -name dbgen | sort)"; \
+		test "$$temp_outputs" = "$$repo_outputs" || { echo "sqlc output directories differ"; echo "generated: $$temp_outputs"; echo "repository: $$repo_outputs"; exit 1; }; \
+		for output in $$temp_outputs; do diff -ru "$$temp_dir/$$output" "$(CURDIR)/$$output"; done
 
-check: fmt-check tidy-check sqlc-check openapi-check vet lint vuln test-race cover-check build ## Run all required local and CI checks.
-	@if test -z "$(TEST_DATABASE_URL)"; then echo "NOTE: PostgreSQL integration tests were skipped because TEST_DATABASE_URL is not set."; fi
+check: fmt-check tidy-check sqlc-check openapi-check vet lint vuln test-race test-integration-check cover-check build ## Run all required local and CI checks.
 
 clean: ## Remove local build and tool artifacts.
 	rm -rf $(BIN_DIR) coverage.out coverage.html

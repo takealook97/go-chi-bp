@@ -12,11 +12,16 @@ import (
 
 	"github.com/lukuku-dev/go-chi-bp/internal/httpapi/apigen"
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
-	"github.com/lukuku-dev/go-chi-bp/internal/widget"
 )
 
 // ReadinessCheck verifies a dependency required to serve traffic.
 type ReadinessCheck func(ctx context.Context) error
+
+// RouteMount describes one capability-owned HTTP route tree.
+type RouteMount struct {
+	Pattern string
+	Handler http.Handler
+}
 
 // Options configures browser and trusted-proxy HTTP behavior.
 type Options struct {
@@ -41,12 +46,22 @@ type ClientIPOptions struct {
 // NewRouter composes all HTTP middleware and module routes.
 func NewRouter(
 	logger *slog.Logger,
-	readinessCheck ReadinessCheck,
-	widgetHandler *widget.Handler,
+	readinessChecks []ReadinessCheck,
+	routes []RouteMount,
 	options Options,
 ) http.Handler {
-	if logger == nil || readinessCheck == nil || widgetHandler == nil {
+	if logger == nil || len(readinessChecks) == 0 {
 		panic("HTTP router dependencies must not be nil")
+	}
+	for _, check := range readinessChecks {
+		if check == nil {
+			panic("HTTP readiness checks must not be nil")
+		}
+	}
+	for _, route := range routes {
+		if route.Pattern == "" || route.Handler == nil {
+			panic("HTTP route mount must have a pattern and handler")
+		}
 	}
 
 	router := chi.NewRouter()
@@ -70,8 +85,10 @@ func NewRouter(
 	}
 
 	router.Get("/health/live", liveness)
-	router.Get("/health/ready", readiness(readinessCheck))
-	router.Mount("/v1/widgets", widgetHandler.Router())
+	router.Get("/health/ready", readiness(readinessChecks))
+	for _, route := range routes {
+		router.Mount(route.Pattern, route.Handler)
+	}
 
 	router.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 		httpkit.WriteError(w, http.StatusNotFound, "route_not_found", "Route was not found.")
@@ -112,15 +129,17 @@ func liveness(w http.ResponseWriter, _ *http.Request) {
 	_ = httpkit.WriteJSON(w, http.StatusOK, apigen.HealthResponse{Status: apigen.Ok})
 }
 
-func readiness(check ReadinessCheck) http.HandlerFunc {
+func readiness(checks []ReadinessCheck) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
 
-		if err := check(ctx); err != nil {
-			httpkit.WriteError(w, http.StatusServiceUnavailable, "not_ready", "Service is not ready.")
+		for _, check := range checks {
+			if err := check(ctx); err != nil {
+				httpkit.WriteError(w, http.StatusServiceUnavailable, "not_ready", "Service is not ready.")
 
-			return
+				return
+			}
 		}
 
 		_ = httpkit.WriteJSON(w, http.StatusOK, apigen.HealthResponse{Status: apigen.Ok})
