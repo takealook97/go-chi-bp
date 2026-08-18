@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
@@ -184,15 +183,7 @@ type contractValidator struct {
 func newContractValidator(t *testing.T) *contractValidator {
 	t.Helper()
 
-	document, err := (&openapi3.Loader{}).LoadFromFile("../../api/openapi.yaml")
-	if err != nil {
-		t.Fatalf("load OpenAPI contract: %v", err)
-	}
-	if err := document.Validate(t.Context()); err != nil {
-		t.Fatalf("validate OpenAPI contract: %v", err)
-	}
-
-	router, err := gorillamux.NewRouter(document)
+	router, err := gorillamux.NewRouter(loadContract(t))
 	if err != nil {
 		t.Fatalf("build contract router: %v", err)
 	}
