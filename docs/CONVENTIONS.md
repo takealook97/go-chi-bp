@@ -64,7 +64,9 @@ that explains the concrete trade-off.
 ## Logging and observability
 
 - Use structured `slog` fields, not formatted log sentences.
-- Include request ID and operation names where available.
+- Log through the request context: the logging handler reads the request ID
+  from it. Naming the request ID in a call duplicates the field. Add operation
+  names yourself.
 - Never log credentials, tokens, cookies, full payment data, or personal data.
 - Log an error once at the boundary responsible for handling it.
 - Metrics and traces must use low-cardinality attributes.

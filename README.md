@@ -18,7 +18,7 @@ caching, queues, email, and vendor integrations are intentionally excluded.
 - Generated OpenAPI request and response types
 - Strict JSON decoding and transport validation
 - Configurable fail-closed CORS and trusted client IP handling
-- Structured JSON logs with `log/slog`
+- Structured JSON logs with `log/slog`, correlated by request ID
 
 ## Create a project from this template
 
