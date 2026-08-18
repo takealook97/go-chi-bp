@@ -56,6 +56,8 @@ func TestLoadRejectsInvalidConfiguration(t *testing.T) {
 		{name: "minimum exceeds maximum", key: "DB_MIN_CONNS", value: "11", wantError: "must not exceed"},
 		{name: "invalid connection lifetime", key: "DB_MAX_CONN_LIFETIME", value: "0s", wantError: "DB_MAX_CONN_LIFETIME"},
 		{name: "invalid idle time", key: "DB_MAX_CONN_IDLE_TIME", value: "invalid", wantError: "DB_MAX_CONN_IDLE_TIME"},
+		{name: "invalid statement timeout", key: "DB_STATEMENT_TIMEOUT", value: "0s", wantError: "DB_STATEMENT_TIMEOUT"},
+		{name: "sub-millisecond statement timeout", key: "DB_STATEMENT_TIMEOUT", value: "500us", wantError: "DB_STATEMENT_TIMEOUT"},
 		{name: "invalid shutdown timeout", key: "SHUTDOWN_TIMEOUT", value: "0s", wantError: "SHUTDOWN_TIMEOUT"},
 		{name: "negative drain delay", key: "SHUTDOWN_DRAIN_DELAY", value: "-1s", wantError: "SHUTDOWN_DRAIN_DELAY"},
 		{name: "invalid drain delay", key: "SHUTDOWN_DRAIN_DELAY", value: "invalid", wantError: "SHUTDOWN_DRAIN_DELAY"},
@@ -191,6 +193,7 @@ func setValidEnvironment(t *testing.T) {
 		"DB_MIN_CONNS":                "2",
 		"DB_MAX_CONN_LIFETIME":        "30m",
 		"DB_MAX_CONN_IDLE_TIME":       "5m",
+		"DB_STATEMENT_TIMEOUT":        "5s",
 		"SHUTDOWN_TIMEOUT":            "10s",
 		"SHUTDOWN_DRAIN_DELAY":        "0s",
 	} {

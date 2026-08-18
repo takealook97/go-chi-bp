@@ -4,6 +4,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,6 +24,11 @@ func Open(ctx context.Context, cfg config.Database) (*pgxpool.Pool, error) {
 	poolConfig.MaxConnLifetime = cfg.MaxConnLifetime
 	poolConfig.MaxConnIdleTime = cfg.MaxConnIdleTime
 	poolConfig.HealthCheckPeriod = 30 * time.Second
+	// Bound statements on the server so a slow query releases its pooled
+	// connection on its own. The caller's context cannot be relied on for this:
+	// an HTTP request carries no deadline of its own, and it is cancelled only
+	// once the client gives up.
+	poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = strconv.FormatInt(cfg.StatementTimeout.Milliseconds(), 10)
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {

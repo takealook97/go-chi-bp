@@ -55,6 +55,10 @@ type Database struct {
 	MinConnections  int32
 	MaxConnLifetime time.Duration
 	MaxConnIdleTime time.Duration
+	// StatementTimeout bounds how long one statement may run. Server read and
+	// write timeouts do not cancel a request's context, so without a server-side
+	// limit a slow query holds its pooled connection until the client goes away.
+	StatementTimeout time.Duration
 }
 
 // Load reads and validates configuration from the process environment.
@@ -81,11 +85,12 @@ func Load() (Config, error) {
 			},
 		},
 		Database: Database{
-			URL:             reader.Text("DATABASE_URL", ""),
-			MaxConnections:  reader.Int32("DB_MAX_CONNS", 10),
-			MinConnections:  reader.Int32("DB_MIN_CONNS", 2),
-			MaxConnLifetime: reader.Duration("DB_MAX_CONN_LIFETIME", 30*time.Minute),
-			MaxConnIdleTime: reader.Duration("DB_MAX_CONN_IDLE_TIME", 5*time.Minute),
+			URL:              reader.Text("DATABASE_URL", ""),
+			MaxConnections:   reader.Int32("DB_MAX_CONNS", 10),
+			MinConnections:   reader.Int32("DB_MIN_CONNS", 2),
+			MaxConnLifetime:  reader.Duration("DB_MAX_CONN_LIFETIME", 30*time.Minute),
+			MaxConnIdleTime:  reader.Duration("DB_MAX_CONN_IDLE_TIME", 5*time.Minute),
+			StatementTimeout: reader.Duration("DB_STATEMENT_TIMEOUT", 5*time.Second),
 		},
 		ShutdownDrainDelay: reader.Duration("SHUTDOWN_DRAIN_DELAY", 5*time.Second),
 		ShutdownTimeout:    reader.Duration("SHUTDOWN_TIMEOUT", 10*time.Second),
@@ -166,6 +171,11 @@ func (cfg Config) validate() error {
 	}
 	if cfg.Database.MaxConnIdleTime <= 0 {
 		errs = append(errs, errors.New("DB_MAX_CONN_IDLE_TIME must be a positive duration"))
+	}
+	// PostgreSQL takes statement_timeout in whole milliseconds and treats zero as
+	// unbounded, so a sub-millisecond value would round down to no limit at all.
+	if cfg.Database.StatementTimeout < time.Millisecond {
+		errs = append(errs, errors.New("DB_STATEMENT_TIMEOUT must be at least 1ms"))
 	}
 	if cfg.ShutdownDrainDelay < 0 {
 		errs = append(errs, errors.New("SHUTDOWN_DRAIN_DELAY must not be negative"))

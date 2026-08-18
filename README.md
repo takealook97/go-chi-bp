@@ -132,6 +132,17 @@ Set the delay above the readiness poll interval of whatever routes traffic.
 `.env.example` sets `0s` because local development has no such router, and
 waiting would only slow `make run` down.
 
+## Statement timeout
+
+`DB_STATEMENT_TIMEOUT` bounds every statement on the PostgreSQL session. Go's
+server read and write timeouts do not cancel a request's context, so without a
+server-side limit one slow query holds its pooled connection until the client
+gives up, and `DB_MAX_CONNS` of them exhaust the pool.
+
+The value must be at least `1ms`: PostgreSQL takes the setting in whole
+milliseconds and treats zero as unbounded. Migrations run through Goose on their
+own connection and are not affected.
+
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
