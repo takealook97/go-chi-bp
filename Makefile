@@ -82,9 +82,10 @@ test-integration-check: ## Run integration tests when PostgreSQL is configured.
 	@if test -n "$(TEST_DATABASE_URL)"; then $(MAKE) test-integration; else echo "NOTE: PostgreSQL integration tests were skipped because TEST_DATABASE_URL is not set."; fi
 
 cover: ## Generate an HTML coverage report for maintained application packages.
-	go test -coverprofile=coverage.out $(MAINTAINED_PACKAGES)
+	go test -tags=integration -coverprofile=coverage.out $(MAINTAINED_PACKAGES)
 	go tool cover -html=coverage.out -o coverage.html
 	@go tool cover -func=coverage.out | tail -n 1
+	@test -n "$(TEST_DATABASE_URL)" || echo "NOTE: PostgreSQL-backed packages report low coverage because TEST_DATABASE_URL is not set."
 
 cover-check: cover ## Enforce the minimum maintained-package coverage.
 	@go tool cover -func=coverage.out | awk -v minimum=$(COVERAGE_MIN) '/^total:/ { value=$$3; sub(/%/, "", value); if (value + 0 < minimum) { printf "Coverage %.1f%% is below %.1f%%.\n", value, minimum; exit 1 } }'

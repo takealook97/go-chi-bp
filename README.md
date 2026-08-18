@@ -78,6 +78,8 @@ make test            # Run external-service-free tests
 make test-race       # Run tests with the race detector
 make test-integration # Run PostgreSQL integration tests
 make cover           # Generate coverage.out and coverage.html
+                     # Set TEST_DATABASE_URL first, or PostgreSQL-backed
+                     # packages count as untested
 make cover-check     # Enforce at least 80% maintained-package coverage
 make check           # Run every required local quality gate
 make fmt             # Format Go source and imports
