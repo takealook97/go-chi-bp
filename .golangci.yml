@@ -55,7 +55,7 @@ linters:
               desc: PostgreSQL adapters must not depend on the HTTP router
             - pkg: github.com/lukuku-dev/go-chi-bp/internal/httpapi
               desc: PostgreSQL adapters must not depend on HTTP contracts
-        production-testkit:
+        production-code:
           list-mode: lax
           files:
             - "**/*.go"
@@ -63,6 +63,8 @@ linters:
           deny:
             - pkg: github.com/lukuku-dev/go-chi-bp/internal/testkit
               desc: production code must not depend on test harnesses
+            - pkg: github.com/getkin/kin-openapi
+              desc: the contract validator is a test-only dependency
   exclusions:
     generated: strict
 
