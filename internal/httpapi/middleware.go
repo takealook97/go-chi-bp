@@ -29,7 +29,6 @@ func logRequest(logger *slog.Logger) func(http.Handler) http.Handler {
 				logger.InfoContext(
 					ctx,
 					"HTTP request completed",
-					"requestID", middleware.GetReqID(ctx),
 					"clientIP", middleware.GetClientIP(ctx),
 					"method", r.Method,
 					"path", r.URL.Path,
@@ -59,7 +58,6 @@ func recoverPanic(logger *slog.Logger) func(http.Handler) http.Handler {
 					logger.ErrorContext(
 						ctx,
 						"HTTP handler panicked",
-						"requestID", middleware.GetReqID(ctx),
 						"stack", string(debug.Stack()),
 					)
 					statusWriter, ok := w.(interface{ Status() int })

@@ -53,14 +53,18 @@ func Build(cfg config.Config, logger *slog.Logger, dependencies Dependencies) *A
 
 	application := &App{}
 	application.acceptingTraffic.Store(true)
+	// Wrap once here so that everything assembled below reports the request its
+	// records belong to. Components log through the request context already, but
+	// slog handlers ignore context on their own.
+	requestLogger := slog.New(httpapi.NewLogHandler(logger.Handler()))
 	widgetHandler := widgethttp.NewHandler(
 		dependencies.WidgetService,
-		logger,
+		requestLogger,
 		httpkit.NewJSONDecoder(cfg.HTTP.MaxRequestBytes),
 	)
 	readinessChecks := append([]httpapi.ReadinessCheck{application.checkAcceptingTraffic}, dependencies.ReadinessChecks...)
 	application.handler = httpapi.NewRouter(
-		logger,
+		requestLogger,
 		readinessChecks,
 		[]httpapi.RouteMount{{Pattern: "/v1/widgets", Handler: widgetHandler.Router()}},
 		httpapi.Options{
