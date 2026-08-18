@@ -225,8 +225,11 @@ components:
               createdAt: "2026-07-10T10:00:00Z"
               updatedAt: "2026-07-10T10:00:00Z"
         limit:
+          description: Page size applied to this response.
           type: integer
           format: int32
+          minimum: 1
+          maximum: 100
           example: 20
         nextCursor:
           description: Opaque cursor for the next page, or null on the final page.

@@ -168,6 +168,33 @@ func TestServiceListAppliesDefaultLimit(t *testing.T) {
 	}
 }
 
+func TestServiceListReportsAppliedLimit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		options   ListOptions
+		wantLimit int32
+	}{
+		{name: "explicit limit", options: ListOptions{Limit: 7}, wantLimit: 7},
+		{name: "defaulted limit", options: ListOptions{}, wantLimit: DefaultListLimit},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			page, err := NewService(&repositoryStub{list: []Widget{}}).List(context.Background(), test.options)
+			if err != nil {
+				t.Fatalf("List() unexpected error: %v", err)
+			}
+			if page.Limit != test.wantLimit {
+				t.Fatalf("page limit = %d, want %d", page.Limit, test.wantLimit)
+			}
+		})
+	}
+}
+
 func TestServiceListReturnsContinuationCursor(t *testing.T) {
 	t.Parallel()
 

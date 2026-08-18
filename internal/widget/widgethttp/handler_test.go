@@ -223,6 +223,20 @@ func TestHandlerList(t *testing.T) {
 			wantBody:   `"code":"invalid_pagination"`,
 		},
 		{
+			name:       "zero limit",
+			target:     "/?limit=0",
+			repository: &repositoryStub{},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   `"code":"invalid_pagination"`,
+		},
+		{
+			name:       "absent limit reports the applied default",
+			target:     "/",
+			repository: &repositoryStub{list: []widget.Widget{}},
+			wantStatus: http.StatusOK,
+			wantBody:   `"limit":20`,
+		},
+		{
 			name:       "invalid cursor",
 			target:     "/?cursor=not-a-valid-cursor",
 			repository: &repositoryStub{},

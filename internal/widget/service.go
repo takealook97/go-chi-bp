@@ -91,7 +91,7 @@ func (service *Service) List(ctx context.Context, options ListOptions) (Page, er
 		return Page{}, fmt.Errorf("list widgets: %w", err)
 	}
 
-	page := Page{Items: results}
+	page := Page{Items: results, Limit: requestedLimit}
 	if len(results) > int(requestedLimit) {
 		page.Items = results[:requestedLimit]
 		last := page.Items[len(page.Items)-1]

@@ -3,6 +3,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -48,6 +49,13 @@ func recoverPanic(logger *slog.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func(ctx context.Context) {
 				if recovered := recover(); recovered != nil {
+					// ErrAbortHandler is the caller asking for the connection to
+					// be dropped silently. Recovering from it would answer a
+					// deliberate abort with a 500.
+					if err, ok := recovered.(error); ok && errors.Is(err, http.ErrAbortHandler) {
+						panic(recovered)
+					}
+
 					logger.ErrorContext(
 						ctx,
 						"HTTP handler panicked",
@@ -68,6 +76,8 @@ func recoverPanic(logger *slog.Logger) func(http.Handler) http.Handler {
 
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The API serves JSON only, so nothing may be loaded or framed from it.
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")

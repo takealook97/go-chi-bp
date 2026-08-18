@@ -13,10 +13,13 @@ import (
 
 // Config contains all process configuration.
 type Config struct {
-	Environment     string
-	HTTP            HTTP
-	Database        Database
-	ShutdownTimeout time.Duration
+	Environment string
+	HTTP        HTTP
+	Database    Database
+	// ShutdownDrainDelay keeps the server serving after readiness starts
+	// failing, so routers can stop sending traffic before shutdown begins.
+	ShutdownDrainDelay time.Duration
+	ShutdownTimeout    time.Duration
 }
 
 // HTTP contains inbound HTTP server settings.
@@ -56,36 +59,43 @@ type Database struct {
 
 // Load reads and validates configuration from the process environment.
 func Load() (Config, error) {
+	reader := &envReader{}
 	cfg := Config{
-		Environment: envString("APP_ENV", "development"),
+		Environment: reader.Text("APP_ENV", "development"),
 		HTTP: HTTP{
-			Address:           envString("HTTP_ADDR", ":8080"),
-			ReadHeaderTimeout: envDuration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
-			ReadTimeout:       envDuration("HTTP_READ_TIMEOUT", 15*time.Second),
-			WriteTimeout:      envDuration("HTTP_WRITE_TIMEOUT", 30*time.Second),
-			IdleTimeout:       envDuration("HTTP_IDLE_TIMEOUT", 60*time.Second),
-			MaxRequestBytes:   envInt64("HTTP_MAX_REQUEST_BYTES", 1<<20),
+			Address:           reader.Text("HTTP_ADDR", ":8080"),
+			ReadHeaderTimeout: reader.Duration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
+			ReadTimeout:       reader.Duration("HTTP_READ_TIMEOUT", 15*time.Second),
+			WriteTimeout:      reader.Duration("HTTP_WRITE_TIMEOUT", 30*time.Second),
+			IdleTimeout:       reader.Duration("HTTP_IDLE_TIMEOUT", 60*time.Second),
+			MaxRequestBytes:   reader.Int64("HTTP_MAX_REQUEST_BYTES", 1<<20),
 			CORS: CORS{
-				AllowedOrigins:   envList("HTTP_CORS_ALLOWED_ORIGINS"),
-				AllowCredentials: envBool("HTTP_CORS_ALLOW_CREDENTIALS", false),
+				AllowedOrigins:   reader.List("HTTP_CORS_ALLOWED_ORIGINS"),
+				AllowCredentials: reader.Bool("HTTP_CORS_ALLOW_CREDENTIALS", false),
 			},
 			ClientIP: ClientIP{
-				Mode:              envString("HTTP_CLIENT_IP_MODE", "remote"),
-				TrustedHeader:     envString("HTTP_CLIENT_IP_HEADER", "X-Real-IP"),
-				TrustedProxyCIDRs: envList("HTTP_TRUSTED_PROXY_CIDRS"),
-				TrustedProxyCount: envInt("HTTP_TRUSTED_PROXY_COUNT", 1),
+				Mode:              reader.Text("HTTP_CLIENT_IP_MODE", "remote"),
+				TrustedHeader:     reader.Text("HTTP_CLIENT_IP_HEADER", "X-Real-IP"),
+				TrustedProxyCIDRs: reader.List("HTTP_TRUSTED_PROXY_CIDRS"),
+				TrustedProxyCount: reader.Int("HTTP_TRUSTED_PROXY_COUNT", 1),
 			},
 		},
 		Database: Database{
-			URL:             os.Getenv("DATABASE_URL"),
-			MaxConnections:  envInt32("DB_MAX_CONNS", 10),
-			MinConnections:  envInt32("DB_MIN_CONNS", 2),
-			MaxConnLifetime: envDuration("DB_MAX_CONN_LIFETIME", 30*time.Minute),
-			MaxConnIdleTime: envDuration("DB_MAX_CONN_IDLE_TIME", 5*time.Minute),
+			URL:             reader.Text("DATABASE_URL", ""),
+			MaxConnections:  reader.Int32("DB_MAX_CONNS", 10),
+			MinConnections:  reader.Int32("DB_MIN_CONNS", 2),
+			MaxConnLifetime: reader.Duration("DB_MAX_CONN_LIFETIME", 30*time.Minute),
+			MaxConnIdleTime: reader.Duration("DB_MAX_CONN_IDLE_TIME", 5*time.Minute),
 		},
-		ShutdownTimeout: envDuration("SHUTDOWN_TIMEOUT", 10*time.Second),
+		ShutdownDrainDelay: reader.Duration("SHUTDOWN_DRAIN_DELAY", 5*time.Second),
+		ShutdownTimeout:    reader.Duration("SHUTDOWN_TIMEOUT", 10*time.Second),
 	}
 
+	// Report unparsable values on their own. Continuing to validate would judge
+	// the fallbacks that replaced them and describe the wrong problem.
+	if err := errors.Join(reader.errs...); err != nil {
+		return Config{}, err
+	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
 	}
@@ -116,11 +126,6 @@ func (cfg Config) validate() error {
 	}
 	if cfg.HTTP.CORS.AllowCredentials && slicesContain(cfg.HTTP.CORS.AllowedOrigins, "*") {
 		errs = append(errs, errors.New("HTTP_CORS_ALLOWED_ORIGINS must not contain * when credentials are allowed"))
-	}
-	if value, ok := os.LookupEnv("HTTP_CORS_ALLOW_CREDENTIALS"); ok {
-		if _, err := strconv.ParseBool(value); err != nil {
-			errs = append(errs, errors.New("HTTP_CORS_ALLOW_CREDENTIALS must be a boolean"))
-		}
 	}
 	switch cfg.HTTP.ClientIP.Mode {
 	case "remote":
@@ -162,6 +167,9 @@ func (cfg Config) validate() error {
 	if cfg.Database.MaxConnIdleTime <= 0 {
 		errs = append(errs, errors.New("DB_MAX_CONN_IDLE_TIME must be a positive duration"))
 	}
+	if cfg.ShutdownDrainDelay < 0 {
+		errs = append(errs, errors.New("SHUTDOWN_DRAIN_DELAY must not be negative"))
+	}
 	if cfg.ShutdownTimeout <= 0 {
 		errs = append(errs, errors.New("SHUTDOWN_TIMEOUT must be positive"))
 	}
@@ -169,7 +177,15 @@ func (cfg Config) validate() error {
 	return errors.Join(errs...)
 }
 
-func envString(key, fallback string) string {
+// envReader reads environment values and records the ones it cannot parse.
+// Returning a sentinel instead would surface later as a range violation and
+// blame the value's bounds for what is really a typo.
+type envReader struct {
+	errs []error
+}
+
+// Text reads a string value, or the fallback when the variable is unset.
+func (reader *envReader) Text(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		return value
 	}
@@ -177,91 +193,71 @@ func envString(key, fallback string) string {
 	return fallback
 }
 
-func envDuration(key string, fallback time.Duration) time.Duration {
-	value, ok := os.LookupEnv(key)
-	if !ok {
-		return fallback
-	}
-
-	parsed, err := time.ParseDuration(value)
-	if err != nil {
-		return -1
-	}
-
-	return parsed
+// Duration reads a Go duration such as "5s".
+func (reader *envReader) Duration(key string, fallback time.Duration) time.Duration {
+	return parseEnv(reader, key, fallback, "duration", time.ParseDuration)
 }
 
-func envInt32(key string, fallback int32) int32 {
-	value, ok := os.LookupEnv(key)
-	if !ok {
-		return fallback
-	}
-
-	parsed, err := strconv.ParseInt(value, 10, 32)
-	if err != nil {
-		return -1
-	}
-
-	return int32(parsed)
+// Int reads a decimal integer.
+func (reader *envReader) Int(key string, fallback int) int {
+	return parseEnv(reader, key, fallback, "integer", strconv.Atoi)
 }
 
-func envInt(key string, fallback int) int {
-	value, ok := os.LookupEnv(key)
-	if !ok {
-		return fallback
-	}
+// Int32 reads a decimal integer that must fit in 32 bits.
+func (reader *envReader) Int32(key string, fallback int32) int32 {
+	return parseEnv(reader, key, fallback, "32-bit integer", func(value string) (int32, error) {
+		parsed, err := strconv.ParseInt(value, 10, 32)
 
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return -1
-	}
-
-	return parsed
+		return int32(parsed), err
+	})
 }
 
-func envInt64(key string, fallback int64) int64 {
-	value, ok := os.LookupEnv(key)
-	if !ok {
-		return fallback
-	}
-
-	parsed, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		return -1
-	}
-
-	return parsed
+// Int64 reads a decimal integer that must fit in 64 bits.
+func (reader *envReader) Int64(key string, fallback int64) int64 {
+	return parseEnv(reader, key, fallback, "64-bit integer", func(value string) (int64, error) {
+		return strconv.ParseInt(value, 10, 64)
+	})
 }
 
-func envBool(key string, fallback bool) bool {
-	value, ok := os.LookupEnv(key)
-	if !ok {
-		return fallback
-	}
-
-	parsed, err := strconv.ParseBool(value)
-	if err != nil {
-		return false
-	}
-
-	return parsed
+// Bool reads a boolean such as "true" or "0".
+func (reader *envReader) Bool(key string, fallback bool) bool {
+	return parseEnv(reader, key, fallback, "boolean", strconv.ParseBool)
 }
 
-func envList(key string) []string {
+// List reads a comma-separated list, discarding surrounding and empty entries.
+func (reader *envReader) List(key string) []string {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
 		return nil
 	}
 
-	values := strings.Split(value, ",")
-	result := make([]string, 0, len(values))
-	for _, item := range values {
+	items := strings.Split(value, ",")
+	result := make([]string, 0, len(items))
+	for _, item := range items {
 		if trimmed := strings.TrimSpace(item); trimmed != "" {
 			result = append(result, trimmed)
 		}
 	}
 
 	return result
+}
+
+// parseEnv applies parse to the variable, recording a failure and falling back
+// so that later validation sees a usable value rather than a sentinel.
+func parseEnv[T any](reader *envReader, key string, fallback T, kind string, parse func(string) (T, error)) T {
+	value, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback
+	}
+
+	parsed, err := parse(value)
+	if err != nil {
+		reader.errs = append(reader.errs, fmt.Errorf("%s is not a valid %s", key, kind))
+
+		return fallback
+	}
+
+	return parsed
 }
 
 func slicesContain(values []string, target string) bool {

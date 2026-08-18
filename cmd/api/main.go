@@ -43,7 +43,12 @@ func run() error {
 	application := app.New(cfg, logger, pool)
 	server := httpserver.New(cfg.HTTP, application.Handler(), logger)
 
-	if err := httpserver.Run(ctx, server, cfg.ShutdownTimeout, application.BeginDrain, logger); err != nil {
+	shutdown := httpserver.ShutdownOptions{
+		BeginDrain: application.BeginDrain,
+		DrainDelay: cfg.ShutdownDrainDelay,
+		Timeout:    cfg.ShutdownTimeout,
+	}
+	if err := httpserver.Run(ctx, server, shutdown, logger); err != nil {
 		return err
 	}
 

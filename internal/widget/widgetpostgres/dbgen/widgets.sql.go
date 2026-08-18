@@ -94,8 +94,7 @@ func (q *Queries) ListWidgets(ctx context.Context, limit int32) ([]Widget, error
 const listWidgetsAfter = `-- name: ListWidgetsAfter :many
 SELECT id, name, created_at, updated_at
 FROM widgets
-WHERE created_at < $1
-   OR (created_at = $1 AND id < $2)
+WHERE (created_at, id) < ($1::timestamptz, $2::bigint)
 ORDER BY created_at DESC, id DESC
 LIMIT $3
 `
@@ -106,6 +105,10 @@ type ListWidgetsAfterParams struct {
 	PageLimit       int32
 }
 
+// Row comparison, not the equivalent OR form: it matches the leading columns of
+// widgets_created_at_id_idx so the planner can start the scan at the cursor.
+// The casts are required because sqlc otherwise infers both row-constructor
+// arguments from the first column and types cursor_id as a timestamp.
 func (q *Queries) ListWidgetsAfter(ctx context.Context, arg ListWidgetsAfterParams) ([]Widget, error) {
 	rows, err := q.db.Query(ctx, listWidgetsAfter, arg.CursorCreatedAt, arg.CursorID, arg.PageLimit)
 	if err != nil {

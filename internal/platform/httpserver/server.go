@@ -25,14 +25,22 @@ func New(cfg config.HTTP, handler http.Handler, logger *slog.Logger) *http.Serve
 	}
 }
 
+// ShutdownOptions controls how the server stops serving traffic.
+type ShutdownOptions struct {
+	// BeginDrain marks the application unready. It is optional.
+	BeginDrain func()
+	// DrainDelay is how long the server keeps accepting requests after
+	// BeginDrain runs. Readiness probes are polled on an interval, so a router
+	// only stops sending traffic some time after the probe starts failing.
+	// Shutting down immediately would drop the requests routed in that window.
+	DrainDelay time.Duration
+	// Timeout bounds the graceful shutdown of requests still in flight. It is
+	// spent after DrainDelay, so the two together bound total stop time.
+	Timeout time.Duration
+}
+
 // Run serves requests until the context is canceled, then shuts down cleanly.
-func Run(
-	ctx context.Context,
-	server *http.Server,
-	shutdownTimeout time.Duration,
-	beforeShutdown func(),
-	logger *slog.Logger,
-) error {
+func Run(ctx context.Context, server *http.Server, options ShutdownOptions, logger *slog.Logger) error {
 	errChannel := make(chan error, 1)
 	go func() {
 		logger.Info("HTTP server started", "address", server.Addr)
@@ -45,12 +53,15 @@ func Run(
 			return fmt.Errorf("serve HTTP: %w", err)
 		}
 	case <-ctx.Done():
-		if beforeShutdown != nil {
-			beforeShutdown()
+		if options.BeginDrain != nil {
+			options.BeginDrain()
+		}
+		if err := drain(errChannel, options.DrainDelay, logger); err != nil {
+			return err
 		}
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), options.Timeout)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
@@ -58,6 +69,29 @@ func Run(
 	}
 
 	logger.Info("HTTP server stopped")
+
+	return nil
+}
+
+// drain keeps serving for the configured delay so routers can observe the
+// failing readiness probe before in-flight shutdown begins.
+func drain(errChannel <-chan error, delay time.Duration, logger *slog.Logger) error {
+	if delay <= 0 {
+		return nil
+	}
+
+	logger.Info("HTTP server draining", "delay", delay)
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case err := <-errChannel:
+		if !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("serve HTTP: %w", err)
+		}
+	case <-timer.C:
+	}
 
 	return nil
 }

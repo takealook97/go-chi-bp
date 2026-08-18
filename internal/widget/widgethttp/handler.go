@@ -19,6 +19,9 @@ import (
 	"github.com/lukuku-dev/go-chi-bp/internal/widget"
 )
 
+// minimumListLimit mirrors the minimum published for the limit query parameter.
+const minimumListLimit = 1
+
 // Service describes the widget use cases consumed by the HTTP adapter.
 type Service interface {
 	Create(ctx context.Context, name string) (widget.Widget, error)
@@ -120,7 +123,7 @@ func (handler *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
-	limit, err := queryInt32(r, "limit", widget.DefaultListLimit)
+	limit, err := listLimit(r)
 	if err != nil {
 		httpkit.WriteError(w, http.StatusBadRequest, "invalid_pagination", "Pagination parameters are invalid.")
 
@@ -156,7 +159,7 @@ func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 		nextCursor = &encoded
 	}
 
-	handler.writeJSON(w, r, http.StatusOK, apigen.WidgetList{Items: items, Limit: limit, NextCursor: nextCursor})
+	handler.writeJSON(w, r, http.StatusOK, apigen.WidgetList{Items: items, Limit: page.Limit, NextCursor: nextCursor})
 }
 
 func (handler *Handler) delete(w http.ResponseWriter, r *http.Request) {
@@ -195,15 +198,24 @@ func pathID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(chi.URLParam(r, "widgetID"), 10, 64)
 }
 
-func queryInt32(r *http.Request, key string, fallback int32) (int32, error) {
-	value := r.URL.Query().Get(key)
+// listLimit reads the page size within the bounds published by the OpenAPI
+// contract. An absent parameter selects the documented default; a present one
+// must satisfy the contract's minimum.
+func listLimit(r *http.Request) (int32, error) {
+	value := r.URL.Query().Get("limit")
 	if value == "" {
-		return fallback, nil
+		return widget.DefaultListLimit, nil
 	}
 
 	parsed, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("parse limit: %w", err)
+	}
+	if parsed < minimumListLimit {
+		return 0, errors.New("limit is below the documented minimum")
+	}
 
-	return int32(parsed), err
+	return int32(parsed), nil
 }
 
 func encodeListCursor(cursor widget.ListCursor) string {

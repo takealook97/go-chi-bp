@@ -57,6 +57,8 @@ func TestLoadRejectsInvalidConfiguration(t *testing.T) {
 		{name: "invalid connection lifetime", key: "DB_MAX_CONN_LIFETIME", value: "0s", wantError: "DB_MAX_CONN_LIFETIME"},
 		{name: "invalid idle time", key: "DB_MAX_CONN_IDLE_TIME", value: "invalid", wantError: "DB_MAX_CONN_IDLE_TIME"},
 		{name: "invalid shutdown timeout", key: "SHUTDOWN_TIMEOUT", value: "0s", wantError: "SHUTDOWN_TIMEOUT"},
+		{name: "negative drain delay", key: "SHUTDOWN_DRAIN_DELAY", value: "-1s", wantError: "SHUTDOWN_DRAIN_DELAY"},
+		{name: "invalid drain delay", key: "SHUTDOWN_DRAIN_DELAY", value: "invalid", wantError: "SHUTDOWN_DRAIN_DELAY"},
 	}
 
 	for _, test := range tests {
@@ -69,6 +71,48 @@ func TestLoadRejectsInvalidConfiguration(t *testing.T) {
 				t.Fatalf("Load() error = %v, want error containing %q", err, test.wantError)
 			}
 		})
+	}
+}
+
+func TestLoadReportsParseFailuresAsParseFailures(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "duration", key: "HTTP_READ_TIMEOUT", value: "not-a-duration"},
+		{name: "int32", key: "DB_MAX_CONNS", value: "not-a-number"},
+		{name: "int64", key: "HTTP_MAX_REQUEST_BYTES", value: "not-a-number"},
+		{name: "int", key: "HTTP_TRUSTED_PROXY_COUNT", value: "not-a-number"},
+		{name: "bool", key: "HTTP_CORS_ALLOW_CREDENTIALS", value: "not-a-bool"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setValidEnvironment(t)
+			t.Setenv(test.key, test.value)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("Load() error = nil, want a parse failure for %s", test.key)
+			}
+			if !strings.Contains(err.Error(), test.key) || !strings.Contains(err.Error(), "is not a valid") {
+				t.Fatalf("Load() error = %v, want %s reported as an unparsable value", err, test.key)
+			}
+		})
+	}
+}
+
+func TestLoadAllowsZeroDrainDelay(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("SHUTDOWN_DRAIN_DELAY", "0s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if cfg.ShutdownDrainDelay != 0 {
+		t.Fatalf("shutdown drain delay = %s, want 0", cfg.ShutdownDrainDelay)
 	}
 }
 
@@ -148,6 +192,7 @@ func setValidEnvironment(t *testing.T) {
 		"DB_MAX_CONN_LIFETIME":        "30m",
 		"DB_MAX_CONN_IDLE_TIME":       "5m",
 		"SHUTDOWN_TIMEOUT":            "10s",
+		"SHUTDOWN_DRAIN_DELAY":        "0s",
 	} {
 		t.Setenv(key, value)
 	}

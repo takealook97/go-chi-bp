@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -91,6 +92,27 @@ func TestRecoverPanicDoesNotLogPanicValue(t *testing.T) {
 	}
 }
 
+func TestRecoverPanicPropagatesAbortHandler(t *testing.T) {
+	t.Parallel()
+
+	recovered := func() (recovered any) {
+		defer func() { recovered = recover() }()
+
+		handler := recoverPanic(slog.New(slog.DiscardHandler))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			panic(http.ErrAbortHandler)
+		}))
+		request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+		handler.ServeHTTP(httptest.NewRecorder(), request)
+
+		return nil
+	}()
+
+	err, ok := recovered.(error)
+	if !ok || !errors.Is(err, http.ErrAbortHandler) {
+		t.Fatalf("recovered = %v, want http.ErrAbortHandler to propagate", recovered)
+	}
+}
+
 func TestSecurityHeaders(t *testing.T) {
 	t.Parallel()
 
@@ -103,9 +125,10 @@ func TestSecurityHeaders(t *testing.T) {
 	handler.ServeHTTP(response, request)
 
 	for header, want := range map[string]string{
-		"Referrer-Policy":        "no-referrer",
-		"X-Content-Type-Options": "nosniff",
-		"X-Frame-Options":        "DENY",
+		"Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+		"Referrer-Policy":         "no-referrer",
+		"X-Content-Type-Options":  "nosniff",
+		"X-Frame-Options":         "DENY",
 	} {
 		if got := response.Header().Get(header); got != want {
 			t.Errorf("%s = %q, want %q", header, got, want)

@@ -25,6 +25,9 @@ type ListOptions struct {
 
 // Page contains one bounded page and an optional continuation cursor.
 type Page struct {
-	Items      []Widget
+	Items []Widget
+	// Limit is the page size actually applied, which may differ from a
+	// caller-supplied zero value that selects the default.
+	Limit      int32
 	NextCursor *ListCursor
 }

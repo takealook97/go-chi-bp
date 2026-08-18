@@ -88,3 +88,65 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		t.Fatalf("widgets table still exists after rollback: %q", *tableName)
 	}
 }
+
+// TestPostgresRepositoryCursorTieBreakIntegration covers the boundary the
+// cursor's row comparison exists for: rows sharing created_at must be ordered
+// and resumed by id alone, with no row repeated or skipped across pages.
+func TestPostgresRepositoryCursorTieBreakIntegration(t *testing.T) {
+	database := postgrestest.New(t)
+	ctx := t.Context()
+	repository := NewPostgresRepository(dbgen.New(database.Pool))
+
+	// One transaction gives every row the same CURRENT_TIMESTAMP.
+	transaction, err := database.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin transaction: %v", err)
+	}
+	for _, name := range []string{"tie one", "tie two", "tie three"} {
+		if _, err := transaction.Exec(ctx, "INSERT INTO widgets (name) VALUES ($1)", name); err != nil {
+			t.Fatalf("insert %q: %v", name, err)
+		}
+	}
+	if err := transaction.Commit(ctx); err != nil {
+		t.Fatalf("commit transaction: %v", err)
+	}
+
+	all, err := repository.List(ctx, widget.ListOptions{Limit: 10})
+	if err != nil {
+		t.Fatalf("List() unexpected error: %v", err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("List() returned %d widgets, want 3", len(all))
+	}
+	if !all[0].CreatedAt.Equal(all[2].CreatedAt) {
+		t.Fatalf("rows do not share created_at, the tie break is untested: %+v", all)
+	}
+
+	var paged []widget.Widget
+	var cursor *widget.ListCursor
+	for range all {
+		page, listErr := repository.List(ctx, widget.ListOptions{Limit: 1, Cursor: cursor})
+		if listErr != nil {
+			t.Fatalf("List() page unexpected error: %v", listErr)
+		}
+		if len(page) != 1 {
+			t.Fatalf("page returned %d widgets, want 1", len(page))
+		}
+		paged = append(paged, page[0])
+		cursor = &widget.ListCursor{CreatedAt: page[0].CreatedAt, ID: page[0].ID}
+	}
+
+	for index := range all {
+		if paged[index] != all[index] {
+			t.Fatalf("paged[%d] = %+v, want %+v", index, paged[index], all[index])
+		}
+	}
+
+	final, err := repository.List(ctx, widget.ListOptions{Limit: 1, Cursor: cursor})
+	if err != nil {
+		t.Fatalf("List() past the last row unexpected error: %v", err)
+	}
+	if len(final) != 0 {
+		t.Fatalf("List() past the last row = %+v, want no widgets", final)
+	}
+}

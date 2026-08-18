@@ -52,7 +52,9 @@ type Widget struct {
 type WidgetList struct {
 	// Items Widgets in the current page.
 	Items []Widget `json:"items"`
-	Limit int32    `json:"limit"`
+
+	// Limit Page size applied to this response.
+	Limit int32 `json:"limit"`
 
 	// NextCursor Opaque cursor for the next page, or null on the final page.
 	NextCursor *string `json:"nextCursor"`

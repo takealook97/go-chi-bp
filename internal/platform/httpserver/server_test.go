@@ -44,11 +44,38 @@ func TestRunStopsCleanlyWhenContextIsCanceled(t *testing.T) {
 	server := testServer("127.0.0.1:0")
 
 	drained := false
-	if err := Run(ctx, server, time.Second, func() { drained = true }, slog.New(slog.DiscardHandler)); err != nil {
+	options := ShutdownOptions{Timeout: time.Second, BeginDrain: func() { drained = true }}
+	if err := Run(ctx, server, options, slog.New(slog.DiscardHandler)); err != nil {
 		t.Fatalf("Run() unexpected error: %v", err)
 	}
 	if !drained {
 		t.Fatal("Run() did not begin draining before shutdown")
+	}
+}
+
+func TestRunKeepsServingForTheDrainDelay(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var drainedAt time.Time
+	options := ShutdownOptions{
+		DrainDelay: 150 * time.Millisecond,
+		Timeout:    time.Second,
+		BeginDrain: func() { drainedAt = time.Now() },
+	}
+
+	startedAt := time.Now()
+	if err := Run(ctx, testServer("127.0.0.1:0"), options, slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatalf("Run() unexpected error: %v", err)
+	}
+
+	if drainedAt.IsZero() {
+		t.Fatal("Run() did not begin draining before shutdown")
+	}
+	if elapsed := time.Since(startedAt); elapsed < options.DrainDelay {
+		t.Fatalf("Run() returned after %s, want at least the %s drain delay", elapsed, options.DrainDelay)
 	}
 }
 
@@ -65,7 +92,8 @@ func TestRunReportsListenFailure(t *testing.T) {
 		}
 	}()
 
-	err = Run(context.Background(), testServer(listener.Addr().String()), time.Second, nil, slog.New(slog.DiscardHandler))
+	options := ShutdownOptions{DrainDelay: time.Minute, Timeout: time.Second}
+	err = Run(context.Background(), testServer(listener.Addr().String()), options, slog.New(slog.DiscardHandler))
 	if err == nil || !strings.Contains(err.Error(), "serve HTTP") {
 		t.Fatalf("Run() error = %v, want listen failure", err)
 	}
