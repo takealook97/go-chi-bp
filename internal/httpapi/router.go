@@ -27,6 +27,10 @@ type RouteMount struct {
 type Options struct {
 	CORS     CORSOptions
 	ClientIP ClientIPOptions
+	// RequestTimeout bounds how long one handler may run. A zero value leaves
+	// requests unbounded, which suits tests that assemble a router directly;
+	// configuration validation keeps the running application from doing so.
+	RequestTimeout time.Duration
 }
 
 // CORSOptions configures browser cross-origin access.
@@ -70,6 +74,11 @@ func NewRouter(
 	router.Use(securityHeaders)
 	router.Use(logRequest(logger))
 	router.Use(recoverPanic(logger))
+	// After the panic guard so a handler that gives up on its deadline is still
+	// covered, and before the routes so every one of them inherits the deadline.
+	if options.RequestTimeout > 0 {
+		router.Use(requestTimeout(options.RequestTimeout))
+	}
 	if len(options.CORS.AllowedOrigins) > 0 {
 		if options.CORS.AllowCredentials && contains(options.CORS.AllowedOrigins, "*") {
 			panic("credentialed CORS must not allow wildcard origins")

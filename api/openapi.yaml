@@ -83,6 +83,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "500":
           $ref: "#/components/responses/InternalServerError"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
     post:
       operationId: createWidget
       summary: Create a widget
@@ -129,6 +131,8 @@ paths:
           $ref: "#/components/responses/UnprocessableEntity"
         "500":
           $ref: "#/components/responses/InternalServerError"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
   /v1/widgets/{widgetID}:
     parameters:
       - $ref: "#/components/parameters/WidgetID"
@@ -153,6 +157,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
     delete:
       operationId: deleteWidget
       summary: Delete a widget
@@ -165,6 +171,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
 components:
   parameters:
     WidgetID:
@@ -323,6 +331,16 @@ components:
             error:
               code: not_ready
               message: Service is not ready.
+    GatewayTimeout:
+      description: The request exceeded the configured request deadline.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: request_timeout
+              message: The request took too long to complete.
     InternalServerError:
       description: An unexpected internal error occurred.
       content:

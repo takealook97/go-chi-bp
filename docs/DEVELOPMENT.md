@@ -85,8 +85,14 @@ tests were therefore skipped. CI always sets the variable.
 Generate a browsable local coverage report with `make cover`. The command writes
 `coverage.out` and `coverage.html`; both files are ignored and removed by
 `make clean`. The merge gate runs `make cover-check` and requires at least 80%
-statement coverage across maintained internal packages. Generated sqlc code and
+statement coverage across the measured internal packages. Generated sqlc code and
 test harness packages are excluded from that aggregate.
+
+Packages whose tests need PostgreSQL are excluded too when `TEST_DATABASE_URL` is
+absent, and the command names the ones it dropped. Counting them would mix
+measured statements with statements no run could have executed, which leaves the
+same threshold meaning something different depending on the machine. CI always
+sets the variable, so the merge gate always measures everything.
 
 The HTTP test suite also compares every OpenAPI path and method with the routes
 registered by Chi. This catches undocumented endpoints and documented endpoints

@@ -2,6 +2,7 @@
 package httpkit
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -145,6 +146,26 @@ func writeJSONBytes(w http.ResponseWriter, status int, body []byte) error {
 	}
 
 	return nil
+}
+
+// WriteContextError writes the public response for a failed request context and
+// reports whether err described one.
+//
+// A canceled context means the client hung up, so nothing is written: only the
+// request middleware sets a deadline on the request context, and the server does
+// not cancel in-flight requests on shutdown, which leaves a client disconnect as
+// the sole remaining cause.
+func WriteContextError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		WriteError(w, http.StatusGatewayTimeout, "request_timeout", "The request took too long to complete.")
+
+		return true
+	case errors.Is(err, context.Canceled):
+		return true
+	default:
+		return false
+	}
 }
 
 // WriteError writes the stable public error envelope.

@@ -72,6 +72,7 @@ func Build(cfg config.Config, logger *slog.Logger, dependencies Dependencies) *A
 				AllowedOrigins:   cfg.HTTP.CORS.AllowedOrigins,
 				AllowCredentials: cfg.HTTP.CORS.AllowCredentials,
 			},
+			RequestTimeout: cfg.HTTP.RequestTimeout,
 			ClientIP: httpapi.ClientIPOptions{
 				Mode:              cfg.HTTP.ClientIP.Mode,
 				TrustedHeader:     cfg.HTTP.ClientIP.TrustedHeader,

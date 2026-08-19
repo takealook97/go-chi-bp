@@ -21,6 +21,14 @@ CHECK_TOOLS := $(SQLC) $(GOLANGCI_LINT) $(VACUUM) $(GOVULNCHECK) $(OAPI_CODEGEN)
 
 COVERAGE_MIN := 80.0
 MAINTAINED_PACKAGES = $(shell go list ./internal/... | grep -Ev '/(apigen|dbgen|testkit)(/|$$)')
+# Packages whose tests need PostgreSQL, found by their integration test files
+# rather than by name so that renaming the example capability cannot silently
+# drop one from the list.
+INTEGRATION_PACKAGES = $(shell go list -tags=integration -f '{{.ImportPath}} {{join .TestGoFiles " "}}' ./internal/... | grep '_integration_test\.go' | cut -d ' ' -f 1)
+# Without TEST_DATABASE_URL those tests skip. Leaving their packages in the
+# profile would dilute the total with statements no run could have executed, so
+# one threshold would silently mean two different things.
+COVERED_PACKAGES = $(if $(TEST_DATABASE_URL),$(MAINTAINED_PACKAGES),$(filter-out $(INTEGRATION_PACKAGES),$(MAINTAINED_PACKAGES)))
 
 .DEFAULT_GOAL := help
 
@@ -81,13 +89,13 @@ test-integration: ## Run PostgreSQL integration tests against TEST_DATABASE_URL.
 test-integration-check: ## Run integration tests when PostgreSQL is configured.
 	@if test -n "$(TEST_DATABASE_URL)"; then $(MAKE) test-integration; else echo "NOTE: PostgreSQL integration tests were skipped because TEST_DATABASE_URL is not set."; fi
 
-cover: ## Generate an HTML coverage report for maintained application packages.
-	go test -tags=integration -coverprofile=coverage.out $(MAINTAINED_PACKAGES)
+cover: ## Generate an HTML coverage report for the measured application packages.
+	go test -tags=integration -coverprofile=coverage.out $(COVERED_PACKAGES)
 	go tool cover -html=coverage.out -o coverage.html
 	@go tool cover -func=coverage.out | tail -n 1
-	@test -n "$(TEST_DATABASE_URL)" || echo "NOTE: PostgreSQL-backed packages report low coverage because TEST_DATABASE_URL is not set."
+	@test -n "$(TEST_DATABASE_URL)" || echo "NOTE: TEST_DATABASE_URL is not set, so these PostgreSQL-backed packages were excluded: $(INTEGRATION_PACKAGES)"
 
-cover-check: cover ## Enforce the minimum maintained-package coverage.
+cover-check: cover ## Enforce the minimum coverage of the measured packages.
 	@go tool cover -func=coverage.out | awk -v minimum=$(COVERAGE_MIN) '/^total:/ { value=$$3; sub(/%/, "", value); if (value + 0 < minimum) { printf "Coverage %.1f%% is below %.1f%%.\n", value, minimum; exit 1 } }'
 
 fmt: $(GOLANGCI_LINT) ## Format Go source files.

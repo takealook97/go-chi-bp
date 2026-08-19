@@ -29,9 +29,13 @@ type HTTP struct {
 	ReadTimeout       time.Duration
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
-	MaxRequestBytes   int64
-	CORS              CORS
-	ClientIP          ClientIP
+	// RequestTimeout bounds how long one handler may run. Server read and write
+	// timeouts do not cancel a request's context, so without it a handler waits
+	// on its dependencies until the client gives up.
+	RequestTimeout  time.Duration
+	MaxRequestBytes int64
+	CORS            CORS
+	ClientIP        ClientIP
 }
 
 // CORS contains browser cross-origin policy settings.
@@ -72,6 +76,7 @@ func Load() (Config, error) {
 			ReadTimeout:       reader.Duration("HTTP_READ_TIMEOUT", 15*time.Second),
 			WriteTimeout:      reader.Duration("HTTP_WRITE_TIMEOUT", 30*time.Second),
 			IdleTimeout:       reader.Duration("HTTP_IDLE_TIMEOUT", 60*time.Second),
+			RequestTimeout:    reader.Duration("HTTP_REQUEST_TIMEOUT", 10*time.Second),
 			MaxRequestBytes:   reader.Int64("HTTP_MAX_REQUEST_BYTES", 1<<20),
 			CORS: CORS{
 				AllowedOrigins:   reader.List("HTTP_CORS_ALLOWED_ORIGINS"),
@@ -126,6 +131,16 @@ func (cfg Config) validate() error {
 	if cfg.HTTP.IdleTimeout <= 0 {
 		errs = append(errs, errors.New("HTTP_IDLE_TIMEOUT must be a positive duration"))
 	}
+	if cfg.HTTP.RequestTimeout <= 0 {
+		errs = append(errs, errors.New("HTTP_REQUEST_TIMEOUT must be a positive duration"))
+	}
+	// The write timeout closes the connection that would carry the timeout
+	// response, so a request deadline at or beyond it can never be reported.
+	// Both values are checked first so that a relation error blames the
+	// relation rather than a value that is already invalid on its own.
+	if cfg.HTTP.RequestTimeout > 0 && cfg.HTTP.WriteTimeout > 0 && cfg.HTTP.RequestTimeout >= cfg.HTTP.WriteTimeout {
+		errs = append(errs, errors.New("HTTP_REQUEST_TIMEOUT must be shorter than HTTP_WRITE_TIMEOUT"))
+	}
 	if cfg.HTTP.MaxRequestBytes < 1 {
 		errs = append(errs, errors.New("HTTP_MAX_REQUEST_BYTES must be at least 1"))
 	}
@@ -176,6 +191,13 @@ func (cfg Config) validate() error {
 	// unbounded, so a sub-millisecond value would round down to no limit at all.
 	if cfg.Database.StatementTimeout < time.Millisecond {
 		errs = append(errs, errors.New("DB_STATEMENT_TIMEOUT must be at least 1ms"))
+	}
+	// A statement allowed to outlive its request would be cut off by the request
+	// deadline instead, which reports every slow query as a generic timeout and
+	// hides the statement limit that was supposed to bound it.
+	if cfg.Database.StatementTimeout >= time.Millisecond && cfg.HTTP.RequestTimeout > 0 &&
+		cfg.Database.StatementTimeout > cfg.HTTP.RequestTimeout {
+		errs = append(errs, errors.New("DB_STATEMENT_TIMEOUT must not exceed HTTP_REQUEST_TIMEOUT"))
 	}
 	if cfg.ShutdownDrainDelay < 0 {
 		errs = append(errs, errors.New("SHUTDOWN_DRAIN_DELAY must not be negative"))

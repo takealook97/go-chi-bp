@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMiddlewarePreservesFlusher(t *testing.T) {
@@ -110,6 +111,48 @@ func TestRecoverPanicPropagatesAbortHandler(t *testing.T) {
 	err, ok := recovered.(error)
 	if !ok || !errors.Is(err, http.ErrAbortHandler) {
 		t.Fatalf("recovered = %v, want http.ErrAbortHandler to propagate", recovered)
+	}
+}
+
+func TestRequestTimeoutCancelsTheHandlerContext(t *testing.T) {
+	t.Parallel()
+
+	var cause error
+	handler := requestTimeout(time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Waiting on Done rather than sleeping keeps the test deterministic: it
+		// finishes as soon as the deadline fires, whatever the machine's timing.
+		<-r.Context().Done()
+		cause = r.Context().Err()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if !errors.Is(cause, context.DeadlineExceeded) {
+		t.Fatalf("context error = %v, want %v", cause, context.DeadlineExceeded)
+	}
+}
+
+func TestRequestTimeoutLeavesTheDeadlineToTheHandler(t *testing.T) {
+	t.Parallel()
+
+	var hasDeadline bool
+	handler := requestTimeout(time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, hasDeadline = r.Context().Deadline()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if !hasDeadline {
+		t.Fatal("request context has no deadline")
+	}
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusNoContent)
 	}
 }
 

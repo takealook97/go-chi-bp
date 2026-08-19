@@ -66,6 +66,9 @@ type WidgetID = int64
 // BadRequest Stable client-safe API error envelope.
 type BadRequest = ErrorResponse
 
+// GatewayTimeout Stable client-safe API error envelope.
+type GatewayTimeout = ErrorResponse
+
 // InternalServerError Stable client-safe API error envelope.
 type InternalServerError = ErrorResponse
 

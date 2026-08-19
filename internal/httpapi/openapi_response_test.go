@@ -139,6 +139,13 @@ func TestResponsesSatisfyTheOpenAPISchemas(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
+			name:       "widget lookup that exceeds the request deadline",
+			method:     http.MethodGet,
+			target:     "/v1/widgets/1",
+			repository: &contractRepository{getErr: context.DeadlineExceeded},
+			wantStatus: http.StatusGatewayTimeout,
+		},
+		{
 			name:       "deleted widget",
 			method:     http.MethodDelete,
 			target:     "/v1/widgets/1",

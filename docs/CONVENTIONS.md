@@ -41,6 +41,8 @@ that explains the concrete trade-off.
 - Return one JSON value per response and a consistent error envelope.
 - Do not expose internal error strings, SQL, stack traces, or vendor responses.
 - Set explicit server and outbound-client timeouts.
+- Bound handler execution with a request deadline and keep it shorter than the
+  server write timeout.
 - Pass the request context to every downstream operation.
 - Trust forwarded client IP values only through an explicitly configured proxy
   topology.

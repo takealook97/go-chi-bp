@@ -3,11 +3,69 @@ package httpkit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestWriteContextError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		err         error
+		wantHandled bool
+		wantStatus  int
+		wantBody    string
+	}{
+		{
+			name:        "deadline exceeded",
+			err:         fmt.Errorf("get widget: %w", context.DeadlineExceeded),
+			wantHandled: true,
+			wantStatus:  http.StatusGatewayTimeout,
+			wantBody:    `"code":"request_timeout"`,
+		},
+		{
+			name:        "canceled",
+			err:         fmt.Errorf("get widget: %w", context.Canceled),
+			wantHandled: true,
+			wantStatus:  http.StatusOK,
+		},
+		{
+			name: "unrelated failure",
+			err:  errors.New("repository failure"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			response := httptest.NewRecorder()
+
+			handled := WriteContextError(response, test.err)
+
+			if handled != test.wantHandled {
+				t.Fatalf("handled = %v, want %v", handled, test.wantHandled)
+			}
+			if test.wantStatus != 0 && response.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", response.Code, test.wantStatus)
+			}
+			if test.wantBody == "" {
+				if response.Body.Len() != 0 {
+					t.Fatalf("body = %q, want empty", response.Body.String())
+				}
+
+				return
+			}
+			if !strings.Contains(response.Body.String(), test.wantBody) {
+				t.Fatalf("body = %q, want to contain %q", response.Body.String(), test.wantBody)
+			}
+		})
+	}
+}
 
 func TestDecodeJSON(t *testing.T) {
 	t.Parallel()

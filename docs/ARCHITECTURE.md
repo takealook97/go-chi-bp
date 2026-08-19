@@ -83,6 +83,55 @@ in the PostgreSQL adapter with pgx. Do not pass pgx transactions through busines
 types, hide transactions in context values, or add a domain-agnostic service
 locator.
 
+The port belongs in the capability package, beside the repository interfaces it
+groups:
+
+```go
+// Repositories are the capability's persistence ports, bound to one transaction.
+type Repositories struct {
+	Widgets Repository
+}
+
+// Atomic runs one use case's writes as a single transaction.
+type Atomic interface {
+	Do(ctx context.Context, fn func(Repositories) error) error
+}
+```
+
+Its implementation belongs in the capability's PostgreSQL adapter:
+
+```go
+// TransactionRunner implements widget.Atomic with pgx.
+type TransactionRunner struct {
+	pool *pgxpool.Pool
+}
+
+// Do runs fn inside one transaction, committing it only when fn returns nil.
+func (runner *TransactionRunner) Do(ctx context.Context, fn func(widget.Repositories) error) error {
+	err := pgx.BeginFunc(ctx, runner.pool, func(tx pgx.Tx) error {
+		// The generated DBTX interface is satisfied by both the pool and a
+		// transaction, so the repository needs no transaction-aware variant.
+		return fn(widget.Repositories{Widgets: NewPostgresRepository(dbgen.New(tx))})
+	})
+	if err != nil {
+		return fmt.Errorf("run widget transaction: %w", err)
+	}
+
+	return nil
+}
+```
+
+That is the whole pattern. The service depends on `Atomic` and never sees pgx,
+the composition root injects the runner like any other adapter, and the existing
+depguard rules already permit exactly this split. The temptation the rules above
+forbid is to reach for the generated `WithTx` from the service instead, which
+puts the driver's transaction type into business signatures.
+
+This repository ships no such use case. The example capability writes one table
+through one repository, and adding a port for a second one that does not exist
+is the speculative generality the conventions rule out. The shape is recorded
+here so that the first real multi-write use case starts from it.
+
 Keep transactions short and never hold them open while calling an external
 service.
 

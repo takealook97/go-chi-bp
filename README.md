@@ -78,9 +78,9 @@ make test            # Run external-service-free tests
 make test-race       # Run tests with the race detector
 make test-integration # Run PostgreSQL integration tests
 make cover           # Generate coverage.out and coverage.html
-                     # Set TEST_DATABASE_URL first, or PostgreSQL-backed
-                     # packages count as untested
-make cover-check     # Enforce at least 80% maintained-package coverage
+                     # Without TEST_DATABASE_URL the PostgreSQL-backed
+                     # packages are excluded instead of counted as untested
+make cover-check     # Enforce at least 80% coverage of the measured packages
 make check           # Run every required local quality gate
 make fmt             # Format Go source and imports
 make fmt-check       # Verify formatting without changing files
@@ -131,6 +131,22 @@ starts failing, and shutting down at once would drop exactly those requests.
 Set the delay above the readiness poll interval of whatever routes traffic.
 `.env.example` sets `0s` because local development has no such router, and
 waiting would only slow `make run` down.
+
+## Request timeout
+
+`HTTP_REQUEST_TIMEOUT` bounds how long one handler may run. Go's server read and
+write timeouts bound the connection, not the work: neither cancels the request's
+context, so without a deadline a handler waits on its dependencies until the
+client gives up.
+
+The value must be shorter than `HTTP_WRITE_TIMEOUT`, which closes the connection
+that would carry the `504` response, and at least `DB_STATEMENT_TIMEOUT`, so a
+slow query is reported as the statement limit it exceeded rather than as a
+generic request timeout. Startup rejects any configuration that breaks either
+relation.
+
+A request canceled by the client receives no response: the connection that would
+carry one is already gone.
 
 ## Statement timeout
 

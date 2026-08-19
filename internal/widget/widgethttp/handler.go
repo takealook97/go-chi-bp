@@ -91,7 +91,7 @@ func (handler *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		handler.internalError(w, r, "create widget", err)
+		handler.failRequest(w, r, "create widget", err)
 
 		return
 	}
@@ -114,7 +114,7 @@ func (handler *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		handler.internalError(w, r, "get widget", err)
+		handler.failRequest(w, r, "get widget", err)
 
 		return
 	}
@@ -143,7 +143,7 @@ func (handler *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		handler.internalError(w, r, "list widgets", err)
+		handler.failRequest(w, r, "list widgets", err)
 
 		return
 	}
@@ -175,7 +175,7 @@ func (handler *Handler) delete(w http.ResponseWriter, r *http.Request) {
 
 		return
 	} else if err != nil {
-		handler.internalError(w, r, "delete widget", err)
+		handler.failRequest(w, r, "delete widget", err)
 
 		return
 	}
@@ -183,7 +183,16 @@ func (handler *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	handler.writeJSON(w, r, http.StatusNoContent, nil)
 }
 
-func (handler *Handler) internalError(w http.ResponseWriter, r *http.Request, operation string, err error) {
+// failRequest maps an operation failure to its public response. A deadline or a
+// client disconnect describes the request's fate rather than a fault in this
+// handler, so neither is reported or logged as an internal error.
+func (handler *Handler) failRequest(w http.ResponseWriter, r *http.Request, operation string, err error) {
+	if httpkit.WriteContextError(w, err) {
+		handler.logger.WarnContext(r.Context(), "HTTP request did not complete", "operation", operation, "error", err)
+
+		return
+	}
+
 	handler.logger.ErrorContext(r.Context(), "HTTP request failed", "operation", operation, "error", err)
 	httpkit.WriteError(w, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 }

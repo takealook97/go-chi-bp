@@ -300,6 +300,35 @@ func TestHandlerDelete(t *testing.T) {
 	})
 }
 
+func TestHandlerReportsContextFailures(t *testing.T) {
+	t.Parallel()
+
+	t.Run("deadline exceeded", func(t *testing.T) {
+		t.Parallel()
+
+		response := serveWidgetRequest(
+			t, &repositoryStub{getErr: context.DeadlineExceeded}, http.MethodGet, "/7", "")
+
+		assertResponse(t, response, http.StatusGatewayTimeout, `"code":"request_timeout"`)
+	})
+
+	t.Run("canceled by the client", func(t *testing.T) {
+		t.Parallel()
+
+		response := serveWidgetRequest(
+			t, &repositoryStub{getErr: context.Canceled}, http.MethodGet, "/7", "")
+
+		// A canceled request has no connection left to answer, so the handler
+		// writes nothing and the recorder keeps its unwritten defaults.
+		if response.Body.Len() != 0 {
+			t.Fatalf("body = %q, want empty", response.Body.String())
+		}
+		if got := response.Header().Get("Content-Type"); got != "" {
+			t.Fatalf("Content-Type = %q, want empty", got)
+		}
+	})
+}
+
 func TestListCursorRoundTrip(t *testing.T) {
 	t.Parallel()
 
