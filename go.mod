@@ -1,6 +1,6 @@
 module github.com/lukuku-dev/go-chi-bp
 
-go 1.26.6
+go 1.27.0
 
 require (
 	github.com/getkin/kin-openapi v0.147.0

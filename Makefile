@@ -19,6 +19,14 @@ GOVULNCHECK := $(BIN_DIR)/govulncheck
 OAPI_CODEGEN := $(BIN_DIR)/oapi-codegen
 CHECK_TOOLS := $(SQLC) $(GOLANGCI_LINT) $(VACUUM) $(GOVULNCHECK) $(OAPI_CODEGEN)
 
+# Tools are rebuilt when the toolchain or their pinned versions change, not only
+# when they are missing. A tool binary otherwise stays in place forever: raising
+# the go directive leaves golangci-lint refusing to load its config, raising a
+# version in tools.mk installs nothing at all, and neither is repaired by
+# reinstalling, because the file the rule looks for already exists. CI keys its
+# binary cache on exactly these two inputs; this is the local half of that rule.
+TOOLS_STAMP := $(BIN_DIR)/.tools-$(shell go env GOVERSION)-$(shell cksum tools.mk | cut -d " " -f 1)
+
 COVERAGE_MIN := 80.0
 MAINTAINED_PACKAGES = $(shell go list ./internal/... | grep -Ev '/(apigen|dbgen|testkit)(/|$$)')
 # Packages whose tests need PostgreSQL, found by their integration test files
@@ -45,22 +53,26 @@ check-tools: $(CHECK_TOOLS) ## Install the pinned tools required by make check.
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
 
-$(SQLC): | $(BIN_DIR)
+$(TOOLS_STAMP): | $(BIN_DIR)
+	@rm -f $(BIN_DIR)/.tools-* $(CHECK_TOOLS) $(GOOSE)
+	@touch $@
+
+$(SQLC): $(TOOLS_STAMP)
 	GOBIN=$(BIN_DIR) go install $(SQLC_INSTALL)
 
-$(GOOSE): | $(BIN_DIR)
+$(GOOSE): $(TOOLS_STAMP)
 	GOBIN=$(BIN_DIR) go install $(GOOSE_INSTALL)
 
-$(GOLANGCI_LINT): | $(BIN_DIR)
+$(GOLANGCI_LINT): $(TOOLS_STAMP)
 	GOBIN=$(BIN_DIR) go install $(GOLANGCI_LINT_INSTALL)
 
-$(VACUUM): | $(BIN_DIR)
+$(VACUUM): $(TOOLS_STAMP)
 	GOBIN=$(BIN_DIR) go install $(VACUUM_INSTALL)
 
-$(GOVULNCHECK): | $(BIN_DIR)
+$(GOVULNCHECK): $(TOOLS_STAMP)
 	GOBIN=$(BIN_DIR) go install $(GOVULNCHECK_INSTALL)
 
-$(OAPI_CODEGEN): | $(BIN_DIR)
+$(OAPI_CODEGEN): $(TOOLS_STAMP)
 	GOBIN=$(BIN_DIR) go install $(OAPI_CODEGEN_INSTALL)
 
 hooks: ## Enable repository-managed Git hooks.
