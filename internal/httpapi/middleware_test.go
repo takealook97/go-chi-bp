@@ -184,3 +184,40 @@ func productionMiddleware(next http.Handler) http.Handler {
 
 	return logRequest(logger)(recoverPanic(logger)(next))
 }
+
+func TestLogRequestRecordsAClientDisconnectRatherThanSuccess(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := logRequest(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		// The client hangs up while the handler is still working, so the handler
+		// returns without writing, exactly as httpkit.WriteContextError leaves it.
+		cancel()
+	}))
+	request := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
+
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	if want := `"status":499`; !strings.Contains(output.String(), want) {
+		t.Fatalf("log = %q, want %s", output.String(), want)
+	}
+}
+
+func TestLogRequestRecordsAnUnwrittenResponseAsSuccess(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	handler := logRequest(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	if want := `"status":200`; !strings.Contains(output.String(), want) {
+		t.Fatalf("log = %q, want %s", output.String(), want)
+	}
+}

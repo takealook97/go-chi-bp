@@ -14,6 +14,11 @@ import (
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
 )
 
+// clientClosedRequestStatus records a request whose client disconnected before
+// the handler answered. No status ever reached the wire, so the value exists
+// only in the log; 499 is the conventional code for that outcome.
+const clientClosedRequestStatus = 499
+
 func logRequest(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -21,18 +26,13 @@ func logRequest(logger *slog.Logger) func(http.Handler) http.Handler {
 			recorder := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
 			defer func(ctx context.Context) {
-				status := recorder.Status()
-				if status == 0 {
-					status = http.StatusOK
-				}
-
 				logger.InfoContext(
 					ctx,
 					"HTTP request completed",
 					"clientIP", middleware.GetClientIP(ctx),
 					"method", r.Method,
 					"path", r.URL.Path,
-					"status", status,
+					"status", recordedStatus(ctx, recorder.Status()),
 					"bytes", recorder.BytesWritten(),
 					"duration", time.Since(startedAt),
 				)
@@ -40,6 +40,29 @@ func logRequest(logger *slog.Logger) func(http.Handler) http.Handler {
 
 			next.ServeHTTP(recorder, r)
 		})
+	}
+}
+
+// recordedStatus reports the status to log for a handler that wrote none.
+//
+// A handler that returns without writing leaves net/http to send 200, but a
+// handler whose client hung up first sends nothing at all: the transport that
+// would carry a response is already gone, which is why httpkit.WriteContextError
+// deliberately writes nothing on a canceled context. Logging that as 200 would
+// record a response the server never sent.
+//
+// The context is the one this middleware received. Only the request timeout
+// downstream of it applies a deadline, and the server does not cancel in-flight
+// requests on shutdown, which leaves a client disconnect as the sole cause of
+// cancellation here.
+func recordedStatus(ctx context.Context, status int) int {
+	switch {
+	case status != 0:
+		return status
+	case errors.Is(ctx.Err(), context.Canceled):
+		return clientClosedRequestStatus
+	default:
+		return http.StatusOK
 	}
 }
 
