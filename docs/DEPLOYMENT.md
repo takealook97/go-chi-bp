@@ -49,18 +49,22 @@ the platform is responsible for treating that exit status as fatal.
 | --- | --- | --- |
 | `DATABASE_URL` | yes | Connection string for a role allowed to change the schema |
 | `MIGRATE_TIMEOUT` | no | How long one run may take, `5m` by default |
+| `MIGRATE_LOCK_TIMEOUT` | no | How long a migration waits for a lock, `5s` by default; `0` waits forever |
 
 Give the job a role with the privileges its migrations need. The API's own role
 does not need them, and separating the two keeps a compromised application from
 altering the schema it runs on.
 
 A migration that waits on a lock held by the running application blocks every
-query behind it. Bound that wait rather than the whole run when a change touches
-a busy table:
+query behind it, because PostgreSQL grants lock requests in order: the readers
+that arrive after the migration queue behind the migration, which is itself
+waiting. `MIGRATE_LOCK_TIMEOUT` bounds that wait so the job fails and the
+deployment stops, instead of the table going quiet for as long as the run is
+allowed to take. Raise it for a change you expect to wait, and set it to `0`
+only when you have decided that waiting indefinitely is better than failing.
 
-```sh
-DATABASE_URL='postgres://migrator@db/app?options=-c%20lock_timeout%3D5s'
-```
+The job also clears any `statement_timeout` its role carries, so a limit meant
+for request handling cannot truncate a schema change halfway.
 
 Raise `MIGRATE_TIMEOUT` for a change that rewrites a large table. The default
 cancels a run that outlives it, and for a migration Goose runs in a transaction —

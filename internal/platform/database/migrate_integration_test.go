@@ -33,7 +33,7 @@ func TestMigrateAppliesEveryMigrationOnceIntegration(t *testing.T) {
 
 	schemaURL := emptySchema(ctx, t, databaseURL)
 
-	applied, err := Migrate(ctx, schemaURL, db.Migrations())
+	applied, err := Migrate(ctx, schemaURL, db.Migrations(), MigrationOptions{})
 	if err != nil {
 		t.Fatalf("Migrate() unexpected error: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestMigrateAppliesEveryMigrationOnceIntegration(t *testing.T) {
 		}
 	}
 
-	reapplied, err := Migrate(ctx, schemaURL, db.Migrations())
+	reapplied, err := Migrate(ctx, schemaURL, db.Migrations(), MigrationOptions{})
 	if err != nil {
 		t.Fatalf("Migrate() unexpected error on the second run: %v", err)
 	}
