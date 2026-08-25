@@ -54,8 +54,8 @@ jobs:
         run: make -j4 check-tools
       - name: Run checks
         run: make check
-      - name: Build production container
-        run: make docker-build
+      - name: Build production containers
+        run: make docker-build docker-build-migrate
 
   commit-convention:
     if: github.event_name == 'pull_request'

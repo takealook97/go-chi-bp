@@ -23,8 +23,15 @@ linters:
       rules:
         business-layer:
           list-mode: lax
+          # Every capability directly under internal/, minus the outer adapters
+          # and harnesses that are not capabilities. Matching the layout instead
+          # of one capability's name is what keeps a second module from being
+          # added with no boundary enforcement and a green lint run.
           files:
-            - "**/internal/widget/*.go"
+            - "**/internal/*/*.go"
+            - "!**/internal/app/*.go"
+            - "!**/internal/httpapi/*.go"
+            - "!**/internal/testkit/*.go"
             - "!$test"
           deny:
             - pkg: github.com/go-chi/chi/v5
@@ -38,7 +45,7 @@ linters:
         http-adapter:
           list-mode: lax
           files:
-            - "**/internal/widget/widgethttp/*.go"
+            - "**/internal/*/*http/*.go"
             - "!$test"
           deny:
             - pkg: github.com/jackc/pgx/v5
@@ -48,7 +55,7 @@ linters:
         postgres-adapter:
           list-mode: lax
           files:
-            - "**/internal/widget/widgetpostgres/*.go"
+            - "**/internal/*/*postgres/*.go"
             - "!$test"
           deny:
             - pkg: github.com/go-chi/chi/v5

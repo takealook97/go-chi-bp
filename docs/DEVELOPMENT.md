@@ -121,8 +121,30 @@ contain real adapter code; do not create empty `domain`, `usecase`, `ports`, and
 
 The depguard rules in `.golangci.yml` mechanically keep router, database,
 generated SQL, and environment packages out of business model and service
-files. Extend those rules when adding or renaming a module or introducing a new
-technical adapter or file layout.
+files. They match capabilities by layout rather than by name, so a module placed
+as `internal/<capability>` with `<capability>http` and `<capability>postgres`
+adapters inherits those bans without any configuration change.
+
+Two bans cannot be written that way, because each names one capability's own
+PostgreSQL adapter and depguard matches a banned package by prefix:
+
+```yaml
+business-layer:
+  deny:
+    - pkg: <module>/internal/order/orderpostgres/dbgen
+http-adapter:
+  deny:
+    - pkg: <module>/internal/order/orderpostgres
+```
+
+Add both when a module gains a PostgreSQL adapter. `internal/app` tests that
+every capability restates them and that they still carry the module path, so a
+module added without them, or a module path renamed without updating the lint
+configuration, fails `make check` instead of linting green with no boundary
+enforcement.
+
+Schema changes reach production through the migration job described in the
+[Deployment guide](DEPLOYMENT.md), never through application startup.
 
 Before turning a module into a service, keep it in-process and follow the
 [Microservice Evolution Guide](MICROSERVICES.md). Boundary hardening and contract

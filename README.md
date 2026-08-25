@@ -7,6 +7,26 @@ The repository is a starting point, not an application framework. It provides
 boring infrastructure defaults and one example vertical module. Authentication,
 caching, queues, email, and vendor integrations are intentionally excluded.
 
+## Before this serves real traffic
+
+"Production baseline" describes the defaults that are here, not a finished
+deployment. Each of the following is deliberately left to the application, and
+each one is missing until you add it:
+
+- **No authentication or authorization.** Every endpoint is open to anyone who
+  can reach it. See [Security](SECURITY.md).
+- **No rate limiting or abuse controls.** Request size, body decoding, and
+  handler duration are bounded; request volume is not.
+- **No TLS.** The server speaks plain HTTP and expects a trusted ingress or load
+  balancer to terminate TLS and to set the forwarded headers you configure.
+- **No metrics or tracing.** Requests are logged as structured JSON correlated by
+  request ID, and nothing exports counters, histograms, or spans.
+- **Schema changes need a deployment step.** Migrations never run at startup. Wire
+  the migration job from the [Deployment guide](docs/DEPLOYMENT.md) into your
+  pipeline, or the schema the API expects will not exist.
+- **The security contact is a placeholder.** Replace the reporting paragraph in
+  [SECURITY.md](SECURITY.md) before the derived repository becomes public.
+
 ## Stack
 
 - Go 1.27.0+
@@ -39,10 +59,14 @@ caching, queues, email, and vendor integrations are intentionally excluded.
    `.golangci.yml` must be included. Its depguard rules name the module path
    literally, and a rule that no longer matches any import is not an error:
    lint keeps reporting zero issues while the architecture boundaries it is
-   supposed to enforce are silently gone.
+   supposed to enforce are silently gone. `make check` fails when the module
+   path in the lint configuration and the one in `go.mod` disagree, so a missed
+   rename is reported rather than discovered later.
 
 3. Rename the `widget` example module to the first real business capability,
-   including its sqlc output path and depguard file rules.
+   including its sqlc output path. The depguard rules match capabilities by
+   layout, so only the two bans naming the capability's own PostgreSQL adapter
+   need editing, and a test fails when they are missing.
 4. Update `api/openapi.yaml`, migrations, queries, and generated code together.
 5. Run `make check` before the first commit.
 
@@ -92,12 +116,14 @@ make openapi         # Generate Go contract types from OpenAPI
 make openapi-check   # Validate and lint the OpenAPI contract
 make sqlc            # Regenerate database access code
 make sqlc-check      # Verify generated database code is current
-make migrate-up      # Apply migrations
+make migrate-up      # Apply migrations with the pinned Goose CLI
+make migrate-run     # Apply migrations the way the deployment job does
 make migrate-down    # Roll back one migration
 make migrate-status  # Show migration status
 make db-up           # Start local PostgreSQL
 make db-down         # Stop local PostgreSQL
-make docker-build    # Build the production container image
+make docker-build    # Build the production API image
+make docker-build-migrate # Build the migration job image
 make clean           # Remove generated local artifacts
 ```
 
@@ -164,6 +190,7 @@ own connection and are not affected.
 - [Architecture](docs/ARCHITECTURE.md)
 - [Conventions](docs/CONVENTIONS.md)
 - [Development](docs/DEVELOPMENT.md)
+- [Deployment](docs/DEPLOYMENT.md)
 - [Microservice evolution](docs/MICROSERVICES.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)

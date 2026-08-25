@@ -41,7 +41,8 @@ COVERED_PACKAGES = $(if $(TEST_DATABASE_URL),$(MAINTAINED_PACKAGES),$(filter-out
 .DEFAULT_GOAL := help
 
 .PHONY: help tools check-tools hooks run build docker-build test test-race test-integration test-integration-check cover cover-check fmt fmt-check lint vet vuln \
-	tidy-check openapi openapi-check sqlc sqlc-check check clean db-up db-down migrate-up migrate-down migrate-status
+	tidy-check openapi openapi-check sqlc sqlc-check check clean db-up db-down migrate-up migrate-down migrate-status \
+	docker-build-migrate migrate-run
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*## "; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -87,6 +88,9 @@ build: ## Build the API binary.
 
 docker-build: ## Verify the production container image builds.
 	docker build --tag go-chi-bp:check .
+
+docker-build-migrate: ## Verify the migration job image builds.
+	docker build --target migrate --tag go-chi-bp-migrate:check .
 
 test: ## Run external-service-free tests.
 	go test -count=1 ./...
@@ -168,6 +172,10 @@ migrate-up: $(GOOSE) ## Apply all pending database migrations.
 migrate-down: $(GOOSE) ## Roll back one database migration.
 	@test -n "$(DATABASE_URL)" || { echo "DATABASE_URL is required"; exit 1; }
 	$(GOOSE) -dir db/migrations postgres "$(DATABASE_URL)" down
+
+migrate-run: ## Apply migrations the way the deployment job does.
+	@test -n "$(DATABASE_URL)" || { echo "DATABASE_URL is required"; exit 1; }
+	go run ./cmd/migrate
 
 migrate-status: $(GOOSE) ## Show database migration status.
 	@test -n "$(DATABASE_URL)" || { echo "DATABASE_URL is required"; exit 1; }

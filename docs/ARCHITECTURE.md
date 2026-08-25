@@ -7,7 +7,8 @@ separate service only when independent deployment, scaling, ownership, security,
 or availability requirements justify the operational cost.
 
 ```text
-cmd/api                 Process entry point and signal handling
+cmd/api                 API process entry point and signal handling
+cmd/migrate             Schema migration job run before the API is deployed
 internal/app            Composition root and application lifecycle
 internal/httpapi        HTTP router and cross-cutting HTTP behavior
 internal/httpapi/apigen Generated public-contract boundary types
@@ -20,6 +21,7 @@ internal/<capability>/<capability>postgres
 internal/<capability>/<capability>postgres/dbgen
                         Module-owned generated database access code
 internal/testkit         Reusable integration-test harnesses
+db                      Migrations embedded for the migration job
 db/migrations           Versioned database schema changes
 db/queries/<capability> SQL owned by one capability and consumed by sqlc
 api                     Public OpenAPI contract
@@ -56,9 +58,13 @@ Each business capability owns its behavior, data access, and public interfaces.
   semantics are genuinely identical.
 
 The repository enforces the most important business-layer import restrictions
-with depguard. When a module introduces a new adapter package or file layout,
-update `.golangci.yml` in the same change so the documented boundary remains
-machine-checkable.
+with depguard, matched by the layout above rather than by capability name, so a
+new module is covered the moment it is placed there. The bans that name a
+capability's own PostgreSQL adapter are the exception, because depguard matches a
+banned package by prefix; those are restated per capability and guarded by a test
+in `internal/app`. When a module introduces an adapter package or a file layout
+the rules do not describe, update `.golangci.yml` in the same change so the
+documented boundary remains machine-checkable.
 
 ## Database ownership
 
