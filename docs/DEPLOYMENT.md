@@ -123,3 +123,23 @@ make migrate-status  # shows what the database has recorded
 `make migrate-up` runs the pinned Goose CLI against `db/migrations` instead. It
 is the convenient loop while writing a migration; `make migrate-run` is the one
 that rehearses the deployment.
+
+To rehearse the deployed artifacts rather than the source, build both images and
+run them:
+
+```sh
+make docker-build docker-build-migrate
+DATABASE_URL='postgres://postgres:postgres@localhost:5432/app?sslmode=disable' \
+  make docker-smoke
+```
+
+That applies the migrations from the job image, starts the API image against the
+schema it applied, and writes and reads a row back. On Docker Desktop the
+containers run inside a VM, so the API needs a published port and the database
+is reached by a different name:
+
+```sh
+DOCKER_NETWORK=bridge \
+DATABASE_URL='postgres://postgres:postgres@host.docker.internal:5432/app?sslmode=disable' \
+  make docker-smoke
+```

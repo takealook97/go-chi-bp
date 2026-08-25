@@ -13,8 +13,14 @@ API_IMAGE="${API_IMAGE:-go-chi-bp:check}"
 MIGRATE_IMAGE="${MIGRATE_IMAGE:-go-chi-bp-migrate:check}"
 API_PORT="${API_PORT:-8080}"
 # Host networking lets the containers reach a database published on the host,
-# which is how CI's service container is exposed. Docker Desktop needs a
-# different mode, so it stays overridable.
+# which is how CI's service container is exposed, and it puts the API's port on
+# the host without publishing it. Docker Desktop runs containers inside a VM, so
+# host networking there reaches the database but leaves the API unreachable from
+# the machine running this script; that mode needs a published port instead.
+#
+#   Linux and CI:   DATABASE_URL=postgres://...@localhost:5432/app?sslmode=disable
+#   Docker Desktop: DOCKER_NETWORK=bridge \
+#                   DATABASE_URL=postgres://...@host.docker.internal:5432/app?sslmode=disable
 DOCKER_NETWORK="${DOCKER_NETWORK:-host}"
 CONTAINER_NAME="go-chi-bp-smoke-api"
 READY_ATTEMPTS="${READY_ATTEMPTS:-30}"
@@ -49,7 +55,15 @@ fi
 
 echo "==> api starts and reports ready"
 docker rm --force "$CONTAINER_NAME" >/dev/null 2>&1 || true
-docker run --detach --name "$CONTAINER_NAME" --network "$DOCKER_NETWORK" \
+# Publishing is both impossible and unnecessary under host networking: the
+# container already listens on the host's port.
+publish=""
+if [ "$DOCKER_NETWORK" != "host" ]; then
+	publish="--publish $API_PORT:$API_PORT"
+fi
+
+# shellcheck disable=SC2086 # $publish is either empty or one flag pair
+docker run --detach --name "$CONTAINER_NAME" --network "$DOCKER_NETWORK" $publish \
 	--env DATABASE_URL="$DATABASE_URL" \
 	--env HTTP_ADDR=":$API_PORT" \
 	--env SHUTDOWN_DRAIN_DELAY=0s \

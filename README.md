@@ -125,6 +125,8 @@ make db-down         # Stop local PostgreSQL
 make docker-build    # Build the production API image
 make docker-build-migrate # Build the migration job image
 make docker-smoke    # Run both images against DATABASE_URL and check they work
+                     # On Docker Desktop: DOCKER_NETWORK=bridge and a
+                     # host.docker.internal database URL, see docs/DEPLOYMENT.md
 make clean           # Remove generated local artifacts
 ```
 
