@@ -42,7 +42,7 @@ COVERED_PACKAGES = $(if $(TEST_DATABASE_URL),$(MAINTAINED_PACKAGES),$(filter-out
 
 .PHONY: help tools check-tools hooks run build docker-build test test-race test-integration test-integration-check cover cover-check fmt fmt-check lint vet vuln \
 	tidy-check openapi openapi-check sqlc sqlc-check check clean db-up db-down migrate-up migrate-down migrate-status \
-	docker-build-migrate migrate-run
+	docker-build-migrate docker-smoke migrate-run
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*## "; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -91,6 +91,10 @@ docker-build: ## Verify the production container image builds.
 
 docker-build-migrate: ## Verify the migration job image builds.
 	docker build --target migrate --tag go-chi-bp-migrate:check .
+
+docker-smoke: ## Run both images against DATABASE_URL and check they work.
+	@test -n "$(DATABASE_URL)" || { echo "DATABASE_URL is required"; exit 1; }
+	./scripts/container-smoke.sh
 
 test: ## Run external-service-free tests.
 	go test -count=1 ./...

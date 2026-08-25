@@ -54,8 +54,36 @@ jobs:
         run: make -j4 check-tools
       - name: Run checks
         run: make check
+
+  container-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18.3-alpine@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
+        env:
+          POSTGRES_DB: app
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d app"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/app?sslmode=disable
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build production containers
         run: make docker-build docker-build-migrate
+      # Building proves the images assemble. Running them proves the binaries
+      # start under distroless, that the migration job applies the schema and
+      # fails without a database, and that the API serves the schema it applied.
+      - name: Run the container smoke test
+        run: make docker-smoke
 
   commit-convention:
     if: github.event_name == 'pull_request'

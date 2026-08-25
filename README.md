@@ -124,6 +124,7 @@ make db-up           # Start local PostgreSQL
 make db-down         # Stop local PostgreSQL
 make docker-build    # Build the production API image
 make docker-build-migrate # Build the migration job image
+make docker-smoke    # Run both images against DATABASE_URL and check they work
 make clean           # Remove generated local artifacts
 ```
 
