@@ -63,9 +63,11 @@ DATABASE_URL='postgres://migrator@db/app?options=-c%20lock_timeout%3D5s'
 ```
 
 Raise `MIGRATE_TIMEOUT` for a change that rewrites a large table. The default
-cancels a run that outlives it, and a cancelled migration is one PostgreSQL rolls
-back, not one that half-applied: Goose records a version only after its
-migration's transaction commits.
+cancels a run that outlives it, and for a migration Goose runs in a transaction —
+every migration in this repository today — a cancelled run is one PostgreSQL
+rolls back rather than one that half-applied, because Goose records a version
+only after that transaction commits. A migration marked `-- +goose NO
+TRANSACTION` has no such guarantee; see below.
 
 ## Failure and retry
 
@@ -73,11 +75,31 @@ Re-running the job is safe and is the normal response to an infrastructure
 failure. Goose applies only the versions the database has not recorded, so a
 retry after a network drop resumes rather than repeats.
 
-A migration that failed on its own SQL is a different case. The failed version is
-not recorded, the versions before it are, and the fix is a new migration or a
+A migration that failed on its own SQL is a different case. Its version is not
+recorded, the versions before it are, and the fix is a new migration or a
 correction to the unapplied one. Deploying the API on top of a partially applied
 set is the thing to avoid; failing the deployment on the job's exit status is
 what prevents it.
+
+## Non-transactional migrations
+
+Both statements above assume the migration ran inside a transaction, which is
+Goose's default and is true of every migration here. A migration marked
+`-- +goose NO TRANSACTION` breaks that assumption: its statements commit as they
+execute, so a cancelled or failed run leaves the database in whatever state the
+last completed statement produced, while Goose records no version for it. A
+retry then re-runs statements that already took effect.
+
+The reason to reach for it is a statement PostgreSQL refuses to run inside a
+transaction, `CREATE INDEX CONCURRENTLY` being the usual one. That case shows the
+cost exactly: a failed concurrent build leaves an INVALID index behind, which the
+retry cannot create over and which serves no query until someone drops it.
+
+A migration that opts out of the transaction carries its own recovery plan in a
+comment at the top of the file: what a partial run leaves behind, and the
+statement that returns the database to a state where the migration can be run
+again. Prefer statements that are safe to repeat — `DROP INDEX IF EXISTS` before
+the concurrent create, rather than a plan that requires someone to notice.
 
 ## Rollback
 
