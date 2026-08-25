@@ -38,37 +38,36 @@ each one is missing until you add it:
 - Generated OpenAPI request and response types
 - Strict JSON decoding and transport validation
 - Configurable fail-closed CORS and trusted client IP handling
-- Structured JSON logs with `log/slog`, correlated by request ID
+- Structured JSON logs with `log/slog`, correlated by a request ID the client
+  also receives
 
 ## Create a project from this template
 
 1. Copy or use this repository as a template.
-2. Replace the placeholder module path everywhere:
+2. Run the initializer from a clean working tree:
 
    ```sh
-   go mod edit -module github.com/your-org/your-project
-   rg -l 'github.com/lukuku-dev/go-chi-bp' --glob '*.go' --glob '.golangci.yml' | \
-     xargs sed -i.bak 's#github.com/lukuku-dev/go-chi-bp#github.com/your-org/your-project#g'
-   find . -name '*.bak' -delete
-   gofmt -w .
-
-   # Only this README should still mention the placeholder path.
-   rg 'github.com/lukuku-dev/go-chi-bp' --glob '!README.md'
+   ./scripts/init-project.sh github.com/your-org/your-project
+   # Or rename the example capability at the same time. The plural is an
+   # argument because it names a table and a route, and no script should guess
+   # English inflection:
+   ./scripts/init-project.sh github.com/your-org/your-project invoice invoices
    ```
 
-   `.golangci.yml` must be included. Its depguard rules name the module path
-   literally, and a rule that no longer matches any import is not an error:
-   lint keeps reporting zero issues while the architecture boundaries it is
-   supposed to enforce are silently gone. `make check` fails when the module
-   path in the lint configuration and the one in `go.mod` disagree, so a missed
-   rename is reported rather than discovered later.
+   It rewrites the module path everywhere, renames the `widget` example and
+   every path holding its name, regenerates the contract and database code, and
+   fails if any template name is left behind.
 
-3. Rename the `widget` example module to the first real business capability,
-   including its sqlc output path. The depguard rules match capabilities by
-   layout, so only the two bans naming the capability's own PostgreSQL adapter
-   need editing, and a test fails when they are missing.
-4. Update `api/openapi.yaml`, migrations, queries, and generated code together.
-5. Run `make check` before the first commit.
+   The step it exists for is `.golangci.yml`. Its depguard rules name the module
+   path literally, and a rule that no longer matches any import is not an error:
+   lint keeps reporting zero issues while the architecture boundaries it is
+   supposed to enforce are silently gone. `make check` fails when the module path
+   in the lint configuration and the one in `go.mod` disagree, so a missed rename
+   is reported rather than discovered later.
+
+3. Update `api/openapi.yaml`, migrations, queries, and generated code together
+   as the first real capability takes shape.
+4. Run `make check` before the first commit.
 
 ## Quick start
 
@@ -168,6 +167,12 @@ write timeouts bound the connection, not the work: neither cancels the request's
 context, so without a deadline a handler waits on its dependencies until the
 client gives up.
 
+The bound is a deadline on the request context, not a forced stop. Go cannot
+interrupt a running goroutine, so the limit is observed by whatever the handler
+waits on: the database driver and every client built on `net/http` honor it, a
+tight CPU loop or a library that ignores its context does not. Give any client
+this repository does not ship a timeout of its own.
+
 The value must be shorter than `HTTP_WRITE_TIMEOUT`, which closes the connection
 that would carry the `504` response, and at least `DB_STATEMENT_TIMEOUT`, so a
 slow query is reported as the statement limit it exceeded rather than as a
@@ -176,6 +181,18 @@ relation.
 
 A request canceled by the client receives no response: the connection that would
 carry one is already gone.
+
+## Request correlation
+
+Every request gets an ID. It is attached to each log record the request
+produces and returned in the `X-Request-ID` response header, so a client holding
+a failed request can quote the same value that appears in the logs. The header
+is published to browsers through the CORS exposed-header list.
+
+A client may send `X-Request-ID` to propagate its own ID. It is used only when
+it is at most 64 characters of `A-Z a-z 0-9 . _ -`, and replaced by a generated
+one otherwise: the value reaches every record the request logs, so its length
+and its bytes cannot be the caller's choice.
 
 ## Statement timeout
 

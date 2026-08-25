@@ -38,13 +38,19 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	if _, err := database.Pool.Exec(ctx, "SELECT pg_sleep(0.01)"); err != nil {
 		t.Fatalf("wait before update: %v", err)
 	}
-	var updatedAt time.Time
-	if err := database.Pool.QueryRow(ctx, "UPDATE widgets SET name = $1 WHERE id = $2 RETURNING updated_at", "updated widget", created.ID).
-		Scan(&updatedAt); err != nil {
+	var updatedAt, createdAt time.Time
+	if err := database.Pool.QueryRow(ctx, "UPDATE widgets SET name = $1 WHERE id = $2 RETURNING updated_at, created_at", "updated widget", created.ID).
+		Scan(&updatedAt, &createdAt); err != nil {
 		t.Fatalf("update widget timestamp: %v", err)
 	}
 	if !updatedAt.After(created.UpdatedAt) {
 		t.Fatalf("updated_at = %v, want after %v", updatedAt, created.UpdatedAt)
+	}
+	// The trigger must touch updated_at and nothing else. A created_at that
+	// moves with every write makes the column meaningless and silently reorders
+	// the cursor pagination that sorts on it.
+	if !createdAt.Equal(created.CreatedAt) {
+		t.Fatalf("created_at = %v, want it unchanged at %v", createdAt, created.CreatedAt)
 	}
 
 	second, err := repository.Create(ctx, "second widget")

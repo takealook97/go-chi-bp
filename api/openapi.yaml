@@ -2,7 +2,13 @@ openapi: 3.1.0
 info:
   title: Go Chi Boilerplate API
   version: 1.0.0
-  description: Public contract for the boilerplate example API.
+  description: |
+    Public contract for the boilerplate example API.
+
+    Every response carries an `X-Request-ID` header holding the correlation ID
+    that the server's log records for that request use. A client may supply the
+    header to propagate its own ID; a value longer than 64 characters or holding
+    anything outside `A-Z a-z 0-9 . _ -` is replaced by a generated one.
 servers:
   - url: http://localhost:8080
 tags:

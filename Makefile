@@ -28,11 +28,19 @@ CHECK_TOOLS := $(SQLC) $(GOLANGCI_LINT) $(VACUUM) $(GOVULNCHECK) $(OAPI_CODEGEN)
 TOOLS_STAMP := $(BIN_DIR)/.tools-$(shell go env GOVERSION)-$(shell cksum tools.mk | cut -d " " -f 1)
 
 COVERAGE_MIN := 80.0
-MAINTAINED_PACKAGES = $(shell go list ./internal/... | grep -Ev '/(apigen|dbgen|testkit)(/|$$)')
+# Every package this repository maintains by hand, including the two commands.
+# cmd/migrate decides whether a deployment applies its schema at all, so its
+# parsing belongs under the same gate as the code it starts. The commands hold
+# statements no `go test` can reach — a main function, and wiring that needs a
+# database and a signal — so the total reads lower than the packages below it.
+# That is the honest number: leaving the commands out did not test them, it only
+# stopped counting them. The container smoke test is what exercises the rest.
+APPLICATION_PACKAGES := ./cmd/... ./internal/...
+MAINTAINED_PACKAGES = $(shell go list $(APPLICATION_PACKAGES) | grep -Ev '/(apigen|dbgen|testkit)(/|$$)')
 # Packages whose tests need PostgreSQL, found by their integration test files
 # rather than by name so that renaming the example capability cannot silently
 # drop one from the list.
-INTEGRATION_PACKAGES = $(shell go list -tags=integration -f '{{.ImportPath}} {{join .TestGoFiles " "}}' ./internal/... | grep '_integration_test\.go' | cut -d ' ' -f 1)
+INTEGRATION_PACKAGES = $(shell go list -tags=integration -f '{{.ImportPath}} {{join .TestGoFiles " "}}' $(APPLICATION_PACKAGES) | grep '_integration_test\.go' | cut -d ' ' -f 1)
 # Without TEST_DATABASE_URL those tests skip. Leaving their packages in the
 # profile would dilute the total with statements no run could have executed, so
 # one threshold would silently mean two different things.
@@ -104,7 +112,7 @@ test-race: ## Run all tests with the race detector.
 
 test-integration: ## Run PostgreSQL integration tests against TEST_DATABASE_URL.
 	@test -n "$(TEST_DATABASE_URL)" || { echo "TEST_DATABASE_URL is required"; exit 1; }
-	go test -race -count=1 -tags=integration -run Integration ./internal/...
+	go test -race -count=1 -tags=integration -run Integration $(APPLICATION_PACKAGES)
 
 test-integration-check: ## Run integration tests when PostgreSQL is configured.
 	@if test -n "$(TEST_DATABASE_URL)"; then $(MAKE) test-integration; else echo "NOTE: PostgreSQL integration tests were skipped because TEST_DATABASE_URL is not set."; fi

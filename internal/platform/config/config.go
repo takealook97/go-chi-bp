@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -144,7 +145,7 @@ func (cfg Config) validate() error {
 	if cfg.HTTP.MaxRequestBytes < 1 {
 		errs = append(errs, errors.New("HTTP_MAX_REQUEST_BYTES must be at least 1"))
 	}
-	if cfg.HTTP.CORS.AllowCredentials && slicesContain(cfg.HTTP.CORS.AllowedOrigins, "*") {
+	if cfg.HTTP.CORS.AllowCredentials && slices.Contains(cfg.HTTP.CORS.AllowedOrigins, "*") {
 		errs = append(errs, errors.New("HTTP_CORS_ALLOWED_ORIGINS must not contain * when credentials are allowed"))
 	}
 	switch cfg.HTTP.ClientIP.Mode {
@@ -290,16 +291,6 @@ func parseEnv[T any](reader *envReader, key string, fallback T, kind string, par
 	}
 
 	return parsed
-}
-
-func slicesContain(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-
-	return false
 }
 
 // String returns a safe summary that intentionally omits credentials.

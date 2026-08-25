@@ -69,6 +69,10 @@ that explains the concrete trade-off.
 - Log through the request context: the logging handler reads the request ID
   from it. Naming the request ID in a call duplicates the field. Add operation
   names yourself.
+- The request ID is also returned in `X-Request-ID`, so a client can quote the
+  same value the logs carry. An inbound one is propagated only when it is at
+  most 64 characters of `A-Z a-z 0-9 . _ -`; anything else is replaced, because
+  the value reaches every record the request logs.
 - Never log credentials, tokens, cookies, full payment data, or personal data.
 - Log an error once at the boundary responsible for handling it.
 - Metrics and traces must use low-cardinality attributes.

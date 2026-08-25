@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -12,6 +13,15 @@ import (
 
 	"github.com/lukuku-dev/go-chi-bp/internal/httpapi/apigen"
 	"github.com/lukuku-dev/go-chi-bp/internal/platform/httpkit"
+)
+
+const (
+	// corsPreflightMaxAge is how long a browser may reuse one preflight result.
+	corsPreflightMaxAge = 300
+	// readinessCheckTimeout bounds every readiness check together. A probe that
+	// hangs is a failed probe: an orchestrator that never gets an answer keeps
+	// routing to an instance that already cannot serve.
+	readinessCheckTimeout = time.Second
 )
 
 // ReadinessCheck verifies a dependency required to serve traffic.
@@ -69,7 +79,7 @@ func NewRouter(
 	}
 
 	router := chi.NewRouter()
-	router.Use(middleware.RequestID)
+	router.Use(requestID)
 	router.Use(clientIPMiddleware(options.ClientIP))
 	router.Use(securityHeaders)
 	router.Use(logRequest(logger))
@@ -80,16 +90,16 @@ func NewRouter(
 		router.Use(requestTimeout(options.RequestTimeout))
 	}
 	if len(options.CORS.AllowedOrigins) > 0 {
-		if options.CORS.AllowCredentials && contains(options.CORS.AllowedOrigins, "*") {
+		if options.CORS.AllowCredentials && slices.Contains(options.CORS.AllowedOrigins, "*") {
 			panic("credentialed CORS must not allow wildcard origins")
 		}
 		router.Use(cors.Handler(cors.Options{
 			AllowedOrigins:   options.CORS.AllowedOrigins,
 			AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
-			ExposedHeaders:   []string{"X-Request-ID"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", requestIDHeader},
+			ExposedHeaders:   []string{requestIDHeader},
 			AllowCredentials: options.CORS.AllowCredentials,
-			MaxAge:           300,
+			MaxAge:           corsPreflightMaxAge,
 		}))
 	}
 
@@ -107,16 +117,6 @@ func NewRouter(
 	})
 
 	return router
-}
-
-func contains(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-
-	return false
 }
 
 func clientIPMiddleware(options ClientIPOptions) func(http.Handler) http.Handler {
@@ -140,7 +140,7 @@ func liveness(w http.ResponseWriter, _ *http.Request) {
 
 func readiness(checks []ReadinessCheck) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), readinessCheckTimeout)
 		defer cancel()
 
 		for _, check := range checks {
